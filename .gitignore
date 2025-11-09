@@ -1,0 +1,114 @@
+# ===================================
+# MONOREPO ROOT .gitignore
+# ===================================
+
+# ===== NODE.JS / PNPM =====
+node_modules/
+.pnpm-debug.log*
+.pnpm-store/
+.npmrc
+.yarnrc
+.yarn/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ===== PYTHON =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# ===== IDE / EDITORS =====
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ===== LOGS =====
+logs/
+*.log
+
+# ===== TEMPORARY FILES =====
+*.tmp
+*.temp
+.cache/
+.temp/
+
+# ===== ENVIRONMENT VARIABLES =====
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# ===== COVERAGE / TESTING =====
+coverage/
+.nyc_output/
+.coverage
+.pytest_cache/
+.tox/
+.nox/
+
+# ===== BUILD ARTIFACTS =====
+dist/
+build/
+*.tsbuildinfo
+
+# ===== OS SPECIFIC =====
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~

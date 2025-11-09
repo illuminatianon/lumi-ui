@@ -1,0 +1,33 @@
+{
+  "name": "lumi-ui",
+  "version": "1.0.0",
+  "description": "Lumi UI - Full-stack application with Vue3 frontend and FastAPI backend",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"pnpm --filter client dev\" \"pnpm --filter server dev\" --names \"client,server\" --prefix-colors \"cyan,yellow\"",
+    "dev:client": "pnpm --filter client dev",
+    "dev:server": "pnpm --filter server dev",
+    "build": "pnpm run --recursive build",
+    "build:client": "pnpm --filter client build",
+    "test": "pnpm run --recursive test",
+    "test:client": "pnpm --filter client test:unit",
+    "lint": "pnpm run --recursive lint",
+    "lint:client": "pnpm --filter client lint",
+    "clean": "pnpm run --recursive clean",
+    "install:all": "pnpm install",
+    "setup": "bash scripts/setup.sh"
+  },
+  "keywords": [
+    "monorepo",
+    "vue3",
+    "fastapi",
+    "typescript",
+    "python"
+  ],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.18.2",
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

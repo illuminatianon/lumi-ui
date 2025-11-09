@@ -1,0 +1,17 @@
+{
+  "name": "server",
+  "version": "1.0.0",
+  "description": "FastAPI backend server for Lumi UI",
+  "private": true,
+  "scripts": {
+    "dev": "bash -c 'source venv/bin/activate && uvicorn main:app --reload --host 0.0.0.0 --port 8000'",
+    "start": "bash -c 'source venv/bin/activate && uvicorn main:app --host 0.0.0.0 --port 8000'",
+    "test": "bash -c 'source venv/bin/activate && pytest'",
+    "lint": "bash -c 'source venv/bin/activate && ruff check .'",
+    "format": "bash -c 'source venv/bin/activate && ruff format .'",
+    "clean": "find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true"
+  },
+  "keywords": ["fastapi", "python", "api"],
+  "author": "",
+  "license": "ISC"
+}
