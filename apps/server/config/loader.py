@@ -188,6 +188,15 @@ class ConfigurationLoader:
             "security": {
                 "enable_logging": True,
                 "log_level": "info"
+            },
+            "langchain": {
+                "default_model": "auto",
+                "openai_model": "gpt-4o",
+                "google_model": "gemini-1.5-pro",
+                "default_temperature": 0.7,
+                "max_tokens": None,
+                "dalle_size": "1024x1024",
+                "dalle_quality": "standard"
             }
         }
     

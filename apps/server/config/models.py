@@ -57,6 +57,17 @@ class SecurityConfig(BaseModel):
     log_level: Literal["debug", "info", "warn", "error"] = "info"
 
 
+class LangChainConfig(BaseModel):
+    """LangChain AI model settings."""
+    default_model: Literal["openai", "google", "auto"] = "auto"
+    openai_model: str = "gpt-4o"
+    google_model: str = "gemini-1.5-pro"
+    default_temperature: float = Field(default=0.7, ge=0.0, le=2.0)
+    max_tokens: Optional[int] = Field(default=None, ge=1)
+    dalle_size: Literal["256x256", "512x512", "1024x1024", "1792x1024", "1024x1792"] = "1024x1024"
+    dalle_quality: Literal["standard", "hd"] = "standard"
+
+
 class LumiConfig(BaseModel):
     """Main configuration model."""
     api_keys: ApiKeysConfig = Field(default_factory=ApiKeysConfig)
@@ -65,6 +76,7 @@ class LumiConfig(BaseModel):
     app: AppConfig = Field(default_factory=AppConfig)
     api: ApiConfig = Field(default_factory=ApiConfig)
     security: SecurityConfig = Field(default_factory=SecurityConfig)
+    langchain: LangChainConfig = Field(default_factory=LangChainConfig)
     
     class Config:
         extra = "allow"  # Allow additional configuration sections
