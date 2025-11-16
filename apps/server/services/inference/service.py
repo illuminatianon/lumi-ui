@@ -43,7 +43,7 @@ class UnifiedInferenceService:
         # Initialize provider instances with configuration
         for provider_name, provider_config in self.config.providers.items():
             if provider_config.enabled:
-                shim = self.provider_registry.get_shim(provider_name, provider_config.dict())
+                shim = self.provider_registry.get_shim(provider_name, provider_config.model_dump())
                 if shim and shim.is_available():
                     logger.info(f"Provider {provider_name} initialized successfully")
                 else:

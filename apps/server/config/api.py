@@ -78,7 +78,7 @@ async def update_user_config(
     """Update user configuration from frontend."""
     try:
         # Convert to dict, excluding None values
-        update_dict = {k: v for k, v in updates.dict().items() if v is not None}
+        update_dict = {k: v for k, v in updates.model_dump().items() if v is not None}
         
         if not update_dict:
             raise HTTPException(status_code=400, detail="No valid updates provided")

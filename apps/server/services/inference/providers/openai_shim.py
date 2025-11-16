@@ -1,8 +1,10 @@
-"""OpenAI provider shim implementation."""
+"""OpenAI provider shim implementation using pure REST API calls."""
 
 import logging
+import json
+import base64
 from typing import Dict, Any, List, Optional
-from openai import AsyncOpenAI
+import httpx
 
 from ..base import ProviderShim
 from ..models import (
@@ -19,20 +21,38 @@ logger = logging.getLogger(__name__)
 
 
 class OpenAIShim(ProviderShim):
-    """OpenAI provider shim with model-aware parameter mapping."""
-    
+    """OpenAI provider shim using pure REST API calls."""
+
     def __init__(self, config: Dict[str, Any]):
         """Initialize OpenAI shim.
-        
+
         Args:
             config: Provider configuration including api_key
         """
         super().__init__(config)
-        self.client = AsyncOpenAI(
-            api_key=config.get('api_key'),
-            base_url=config.get('base_url')
+        self.api_key = config.get('api_key')
+        self.base_url = config.get('base_url', 'https://api.openai.com')
+        self.client = httpx.AsyncClient(
+            base_url=self.base_url,
+            headers={
+                'Authorization': f'Bearer {self.api_key}',
+                'Content-Type': 'application/json'
+            },
+            timeout=60.0
         )
-    
+
+    async def __aenter__(self):
+        """Async context manager entry."""
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Async context manager exit."""
+        await self.client.aclose()
+
+    def is_available(self) -> bool:
+        """Check if the provider is available."""
+        return bool(self.api_key)
+
     async def process_request(self, request: UnifiedRequest, model_config: ModelConfig) -> UnifiedResponse:
         """Process a unified request using OpenAI API.
         
@@ -55,51 +75,55 @@ class OpenAIShim(ProviderShim):
             return await self._handle_text_request(request, model_config)
     
     async def _handle_text_request(self, request: UnifiedRequest, model_config: ModelConfig) -> UnifiedResponse:
-        """Handle pure text generation requests."""
+        """Handle pure text generation requests via REST API."""
         # Build messages
         messages = []
         if request.system_message:
             messages.append({"role": "system", "content": request.system_message})
         messages.append({"role": "user", "content": request.prompt})
-        
+
         # Map parameters
-        params = self.map_parameters(request.dict(), model_config)
-        params.update({
+        params = self.map_parameters(request.model_dump(), model_config)
+        payload = {
             "model": model_config.name,
-            "messages": messages
-        })
-        
-        # Remove None values and unsupported parameters
-        params = {
-            k: v for k, v in params.items()
-            if v is not None and (k in model_config.supported_parameters or k in ["model", "messages"])
+            "messages": messages,
+            **{k: v for k, v in params.items() if v is not None and k in model_config.supported_parameters}
         }
-        
+
         try:
-            response = await self.client.chat.completions.create(**params)
-            
+            response = await self.client.post('/v1/chat/completions', json=payload)
+            response.raise_for_status()
+            data = response.json()
+
             return UnifiedResponse(
-                content=response.choices[0].message.content,
-                model_used=response.model,
+                content=data['choices'][0]['message']['content'],
+                model_used=data['model'],
                 provider="openai",
-                usage=TokenUsage.from_openai(response.usage),
-                finish_reason=response.choices[0].finish_reason,
-                metadata={"response_id": response.id}
+                usage=TokenUsage(
+                    prompt_tokens=data['usage']['prompt_tokens'],
+                    completion_tokens=data['usage']['completion_tokens'],
+                    total_tokens=data['usage']['total_tokens']
+                ),
+                finish_reason=data['choices'][0]['finish_reason'],
+                metadata={"response_id": data['id']}
             )
+        except httpx.HTTPStatusError as e:
+            logger.error(f"OpenAI API error: {e.response.status_code} - {e.response.text}")
+            raise
         except Exception as e:
             logger.error(f"OpenAI text request failed: {e}")
             raise
     
     async def _handle_vision_request(self, request: UnifiedRequest, model_config: ModelConfig) -> UnifiedResponse:
-        """Handle vision requests with image attachments."""
+        """Handle vision requests with image attachments via REST API."""
         # Build messages with images in OpenAI format
         messages = []
         if request.system_message:
             messages.append({"role": "system", "content": request.system_message})
-        
+
         # Build user message with text and images
         content = [{"type": "text", "text": request.prompt}]
-        
+
         for attachment in request.attachments:
             if attachment.attachment_type == AttachmentType.IMAGE:
                 content.append({
@@ -108,53 +132,62 @@ class OpenAIShim(ProviderShim):
                         "url": f"data:{attachment.mime_type};base64,{attachment.to_base64()}"
                     }
                 })
-        
+
         messages.append({"role": "user", "content": content})
-        
-        # Map parameters and make request
-        params = self.map_parameters(request.dict(), model_config)
-        params.update({
+
+        # Map parameters
+        params = self.map_parameters(request.model_dump(), model_config)
+        payload = {
             "model": model_config.name,
-            "messages": messages
-        })
-        
-        # Remove None values and unsupported parameters
-        params = {
-            k: v for k, v in params.items()
-            if v is not None and (k in model_config.supported_parameters or k in ["model", "messages"])
+            "messages": messages,
+            **{k: v for k, v in params.items() if v is not None and k in model_config.supported_parameters}
         }
-        
+
         try:
-            response = await self.client.chat.completions.create(**params)
-            
+            response = await self.client.post('/v1/chat/completions', json=payload)
+            response.raise_for_status()
+            data = response.json()
+
             return UnifiedResponse(
-                content=response.choices[0].message.content,
-                model_used=response.model,
+                content=data['choices'][0]['message']['content'],
+                model_used=data['model'],
                 provider="openai",
-                usage=TokenUsage.from_openai(response.usage),
-                finish_reason=response.choices[0].finish_reason,
+                usage=TokenUsage(
+                    prompt_tokens=data['usage']['prompt_tokens'],
+                    completion_tokens=data['usage']['completion_tokens'],
+                    total_tokens=data['usage']['total_tokens']
+                ),
+                finish_reason=data['choices'][0]['finish_reason'],
                 attachments_processed=[
                     {"type": att.attachment_type, "filename": att.filename}
                     for att in request.attachments
-                ]
+                ],
+                metadata={"response_id": data['id']}
             )
+        except httpx.HTTPStatusError as e:
+            logger.error(f"OpenAI API error: {e.response.status_code} - {e.response.text}")
+            raise
         except Exception as e:
             logger.error(f"OpenAI vision request failed: {e}")
             raise
     
     async def _handle_image_generation(self, request: UnifiedRequest, model_config: ModelConfig) -> UnifiedResponse:
-        """Handle DALL-E image generation."""
+        """Handle DALL-E image generation via REST API."""
+        payload = {
+            "model": model_config.name,
+            "prompt": request.prompt,
+            "size": request.extras.get("size", "1024x1024"),
+            "quality": request.extras.get("quality", "standard"),
+            "n": 1
+        }
+
         try:
-            response = await self.client.images.generate(
-                model=model_config.name,
-                prompt=request.prompt,
-                size=request.extras.get("size", "1024x1024"),
-                quality=request.extras.get("quality", "standard"),
-                n=1
-            )
-            
+            response = await self.client.post('/v1/images/generations', json=payload)
+            response.raise_for_status()
+            data = response.json()
+
             return UnifiedResponse(
-                images=[img.url for img in response.data],
+                images=[img['url'] for img in data['data']],
                 model_used=model_config.name,
                 provider="openai",
                 usage=TokenUsage(prompt_tokens=0, completion_tokens=0, total_tokens=0),
@@ -164,6 +197,9 @@ class OpenAIShim(ProviderShim):
                     for att in request.attachments
                 ]
             )
+        except httpx.HTTPStatusError as e:
+            logger.error(f"OpenAI API error: {e.response.status_code} - {e.response.text}")
+            raise
         except Exception as e:
             logger.error(f"OpenAI image generation failed: {e}")
             raise
@@ -175,21 +211,26 @@ class OpenAIShim(ProviderShim):
         return await self._handle_image_generation(request, model_config)
 
     async def discover_models(self) -> Dict[str, ModelConfig]:
-        """Discover available OpenAI models."""
+        """Discover available OpenAI models via REST API."""
         try:
-            models = await self.client.models.list()
-            discovered = {}
+            response = await self.client.get('/v1/models')
+            response.raise_for_status()
+            data = response.json()
 
-            for model in models.data:
+            discovered = {}
+            for model in data['data']:
                 # Use static registry if available, otherwise infer
-                if model.id in ["gpt-4o", "gpt-5", "o1-preview", "dall-e-3"]:
+                if model['id'] in ["gpt-4o", "gpt-5", "o1-preview", "dall-e-3"]:
                     # These are handled by static registry
                     continue
                 else:
                     # Infer configuration for unknown models
-                    discovered[model.id] = self._infer_model_config(model.id)
+                    discovered[model['id']] = self._infer_model_config(model['id'])
 
             return discovered
+        except httpx.HTTPStatusError as e:
+            logger.error(f"OpenAI API error: {e.response.status_code} - {e.response.text}")
+            return {}
         except Exception as e:
             logger.error(f"Failed to discover OpenAI models: {e}")
             return {}

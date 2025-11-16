@@ -1,9 +1,10 @@
-"""Google/Gemini provider shim implementation."""
+"""Google/Gemini provider shim implementation using pure REST API calls."""
 
 import logging
+import json
+import base64
 from typing import Dict, Any, List, Optional
-import google.generativeai as genai
-from google.generativeai.types import GenerationConfig
+import httpx
 
 from ..base import ProviderShim
 from ..models import (
@@ -22,18 +23,34 @@ logger = logging.getLogger(__name__)
 
 
 class GoogleShim(ProviderShim):
-    """Google/Gemini provider shim implementation."""
-    
+    """Google/Gemini provider shim using pure REST API calls."""
+
     def __init__(self, config: Dict[str, Any]):
         """Initialize Google shim.
-        
+
         Args:
             config: Provider configuration including api_key
         """
         super().__init__(config)
-        genai.configure(api_key=config.get('api_key'))
-        self._models_cache = {}
-    
+        self.api_key = config.get('api_key')
+        self.base_url = 'https://generativelanguage.googleapis.com'
+        self.client = httpx.AsyncClient(
+            base_url=self.base_url,
+            timeout=60.0
+        )
+
+    async def __aenter__(self):
+        """Async context manager entry."""
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Async context manager exit."""
+        await self.client.aclose()
+
+    def is_available(self) -> bool:
+        """Check if the provider is available."""
+        return bool(self.api_key)
+
     async def process_request(self, request: UnifiedRequest, model_config: ModelConfig) -> UnifiedResponse:
         """Process a unified request using Google Gemini API.
         
@@ -57,107 +74,131 @@ class GoogleShim(ProviderShim):
             return await self._handle_text_request(request, model_config)
     
     async def _handle_text_request(self, request: UnifiedRequest, model_config: ModelConfig) -> UnifiedResponse:
-        """Handle pure text generation requests."""
+        """Handle pure text generation requests via REST API."""
+        # Build content for Gemini API
+        content = self._build_prompt(request)
+
+        # Map parameters
+        generation_config = self._build_generation_config(request, model_config)
+
+        payload = {
+            "contents": [{"parts": [{"text": content}]}],
+            "generationConfig": generation_config
+        }
+
         try:
-            # Get or create model instance
-            model = self._get_model_instance(model_config.name)
-            
-            # Map unified parameters to Gemini format
-            generation_config = self._build_generation_config(request, model_config)
-            
-            # Build prompt from system message and user prompt
-            prompt = self._build_prompt(request)
-            
-            # Generate content
-            response = await model.generate_content_async(
-                prompt,
-                generation_config=generation_config
-            )
-            
+            url = f'/v1beta/models/{model_config.name}:generateContent'
+            params = {'key': self.api_key}
+
+            response = await self.client.post(url, json=payload, params=params)
+            response.raise_for_status()
+            data = response.json()
+
+            # Extract response content
+            content = data['candidates'][0]['content']['parts'][0]['text']
+
+            # Extract usage metadata if available
+            usage_metadata = data.get('usageMetadata', {})
+
             return UnifiedResponse(
-                content=response.text,
+                content=content,
                 model_used=model_config.name,
                 provider="google",
                 usage=TokenUsage(
-                    prompt_tokens=response.usage_metadata.prompt_token_count,
-                    completion_tokens=response.usage_metadata.candidates_token_count,
-                    total_tokens=response.usage_metadata.total_token_count
+                    prompt_tokens=usage_metadata.get('promptTokenCount', 0),
+                    completion_tokens=usage_metadata.get('candidatesTokenCount', 0),
+                    total_tokens=usage_metadata.get('totalTokenCount', 0)
                 ),
-                finish_reason=response.candidates[0].finish_reason.name,
-                metadata={"safety_ratings": [rating.category.name for rating in response.candidates[0].safety_ratings]}
+                finish_reason=data['candidates'][0].get('finishReason', 'STOP'),
+                metadata={
+                    "safety_ratings": data['candidates'][0].get('safetyRatings', [])
+                }
             )
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Google API error: {e.response.status_code} - {e.response.text}")
+            raise
         except Exception as e:
             logger.error(f"Google text request failed: {e}")
             raise
     
     async def _handle_vision_request(self, request: UnifiedRequest, model_config: ModelConfig) -> UnifiedResponse:
-        """Handle vision requests with image attachments."""
+        """Handle vision requests with image attachments via REST API."""
+        # Build content parts for Gemini API
+        parts = [{"text": request.prompt}]
+
+        # Add images as inline data
+        for attachment in request.attachments:
+            if attachment.attachment_type == AttachmentType.IMAGE:
+                parts.append({
+                    "inline_data": {
+                        "mime_type": attachment.mime_type,
+                        "data": attachment.to_base64()
+                    }
+                })
+
+        # Map parameters
+        generation_config = self._build_generation_config(request, model_config)
+
+        payload = {
+            "contents": [{"parts": parts}],
+            "generationConfig": generation_config
+        }
+
         try:
-            # Get or create model instance
-            model = self._get_model_instance(model_config.name)
-            
-            # Map unified parameters to Gemini format
-            generation_config = self._build_generation_config(request, model_config)
-            
-            # Build content with text and images
-            content_parts = [request.prompt]
-            
-            for attachment in request.attachments:
-                if attachment.attachment_type == AttachmentType.IMAGE:
-                    # Convert to PIL Image for Gemini
-                    from PIL import Image
-                    from io import BytesIO
-                    image = Image.open(BytesIO(attachment.content))
-                    content_parts.append(image)
-            
-            # Generate content
-            response = await model.generate_content_async(
-                content_parts,
-                generation_config=generation_config
-            )
-            
+            url = f'/v1beta/models/{model_config.name}:generateContent'
+            params = {'key': self.api_key}
+
+            response = await self.client.post(url, json=payload, params=params)
+            response.raise_for_status()
+            data = response.json()
+
+            # Extract response content
+            content = data['candidates'][0]['content']['parts'][0]['text']
+
+            # Extract usage metadata if available
+            usage_metadata = data.get('usageMetadata', {})
+
             return UnifiedResponse(
-                content=response.text,
+                content=content,
                 model_used=model_config.name,
                 provider="google",
                 usage=TokenUsage(
-                    prompt_tokens=response.usage_metadata.prompt_token_count,
-                    completion_tokens=response.usage_metadata.candidates_token_count,
-                    total_tokens=response.usage_metadata.total_token_count
+                    prompt_tokens=usage_metadata.get('promptTokenCount', 0),
+                    completion_tokens=usage_metadata.get('candidatesTokenCount', 0),
+                    total_tokens=usage_metadata.get('totalTokenCount', 0)
                 ),
-                finish_reason=response.candidates[0].finish_reason.name,
+                finish_reason=data['candidates'][0].get('finishReason', 'STOP'),
                 attachments_processed=[
                     {"type": att.attachment_type, "filename": att.filename}
                     for att in request.attachments
                 ],
-                metadata={"safety_ratings": [rating.category.name for rating in response.candidates[0].safety_ratings]}
+                metadata={
+                    "safety_ratings": data['candidates'][0].get('safetyRatings', [])
+                }
             )
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Google API error: {e.response.status_code} - {e.response.text}")
+            raise
         except Exception as e:
             logger.error(f"Google vision request failed: {e}")
             raise
     
-    def _get_model_instance(self, model_name: str):
-        """Get or create a Gemini model instance."""
-        if model_name not in self._models_cache:
-            self._models_cache[model_name] = genai.GenerativeModel(model_name)
-        return self._models_cache[model_name]
-    
-    def _build_generation_config(self, request: UnifiedRequest, model_config: ModelConfig) -> GenerationConfig:
+    def _build_generation_config(self, request: UnifiedRequest, model_config: ModelConfig) -> Dict[str, Any]:
         """Build Gemini generation configuration from unified request."""
-        params = self.map_parameters(request.dict(), model_config)
-        
+        params = self.map_parameters(request.model_dump(), model_config)
+
         config_params = {}
-        if "temperature" in params:
+        if "temperature" in params and params["temperature"] is not None:
             config_params["temperature"] = params["temperature"]
-        if "max_output_tokens" in params:
-            config_params["max_output_tokens"] = params["max_output_tokens"]
-        if "top_p" in params:
-            config_params["top_p"] = params["top_p"]
-        if "stop_sequences" in params:
-            config_params["stop_sequences"] = params["stop_sequences"]
-        
-        return GenerationConfig(**config_params)
-    
+        if "max_output_tokens" in params and params["max_output_tokens"] is not None:
+            config_params["maxOutputTokens"] = params["max_output_tokens"]
+        if "top_p" in params and params["top_p"] is not None:
+            config_params["topP"] = params["top_p"]
+        if "stop_sequences" in params and params["stop_sequences"] is not None:
+            config_params["stopSequences"] = params["stop_sequences"]
+
+        return config_params
+
     def _build_prompt(self, request: UnifiedRequest) -> str:
         """Build prompt from system message and user prompt."""
         if request.system_message:
@@ -165,18 +206,26 @@ class GoogleShim(ProviderShim):
         return request.prompt
 
     async def discover_models(self) -> Dict[str, ModelConfig]:
-        """Discover available Google models."""
+        """Discover available Google models via REST API."""
         try:
-            models = genai.list_models()
-            discovered = {}
+            url = '/v1beta/models'
+            params = {'key': self.api_key}
 
-            for model in models:
+            response = await self.client.get(url, params=params)
+            response.raise_for_status()
+            data = response.json()
+
+            discovered = {}
+            for model in data.get('models', []):
                 # Only include generative models
-                if 'generateContent' in model.supported_generation_methods:
-                    model_id = model.name.split('/')[-1]  # Extract model name from full path
+                if 'generateContent' in model.get('supportedGenerationMethods', []):
+                    model_id = model['name'].split('/')[-1]  # Extract model name from full path
                     discovered[model_id] = self._infer_model_config(model_id, model)
 
             return discovered
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Google API error: {e.response.status_code} - {e.response.text}")
+            return {}
         except Exception as e:
             logger.error(f"Failed to discover Google models: {e}")
             return {}

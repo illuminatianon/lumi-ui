@@ -1,5 +1,5 @@
 """API package for Lumi UI backend."""
 
-from .ai_router import router as ai_router
+# No API routers currently - all removed as they were auto-generated and unused
 
-__all__ = ["ai_router"]
+__all__ = []

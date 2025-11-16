@@ -10,9 +10,6 @@ load_dotenv()
 # Import configuration system
 from config import initialize_config, config_router, get_config_health
 
-# Import API routers
-from api import ai_router
-
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -42,7 +39,6 @@ app.add_middleware(
 
 # Include routers
 app.include_router(config_router)
-app.include_router(ai_router)
 
 
 # Pydantic models
