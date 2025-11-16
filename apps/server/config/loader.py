@@ -197,6 +197,25 @@ class ConfigurationLoader:
                 "max_tokens": None,
                 "dalle_size": "1024x1024",
                 "dalle_quality": "standard"
+            },
+            "inference": {
+                "enabled": False,
+                "default_provider": "auto",
+                "fallback_providers": ["openai", "google"],
+                "provider_selection_strategy": "cost_optimized",
+                "openai": {
+                    "enabled": True,
+                    "default_model": "gpt-4o",
+                    "timeout": 30
+                },
+                "google": {
+                    "enabled": True,
+                    "default_model": "gemini-1.5-pro",
+                    "timeout": 30
+                },
+                "default_temperature": 0.7,
+                "default_max_tokens": None,
+                "default_timeout": 30
             }
         }
     

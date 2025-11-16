@@ -1,6 +1,6 @@
 """Configuration models and types for Lumi UI backend."""
 
-from typing import Optional, Dict, Any, Literal
+from typing import Optional, Dict, Any, Literal, List
 from pydantic import BaseModel, Field, validator
 
 
@@ -68,6 +68,39 @@ class LangChainConfig(BaseModel):
     dalle_quality: Literal["standard", "hd"] = "standard"
 
 
+class InferenceProviderConfig(BaseModel):
+    """Configuration for an inference provider."""
+    enabled: bool = True
+    api_key: Optional[str] = None
+    base_url: Optional[str] = None
+    default_model: str = "auto"
+    rate_limit_rpm: Optional[int] = None  # requests per minute
+    timeout: int = 30  # seconds
+
+
+class UnifiedInferenceConfig(BaseModel):
+    """Unified inference infrastructure settings."""
+    enabled: bool = False  # Start disabled, enable when ready
+    default_provider: str = "auto"
+    fallback_providers: List[str] = Field(default_factory=lambda: ["openai", "google"])
+    provider_selection_strategy: Literal["cost_optimized", "performance", "reliability"] = "cost_optimized"
+
+    # Provider configurations
+    openai: InferenceProviderConfig = Field(default_factory=lambda: InferenceProviderConfig(
+        enabled=True,
+        default_model="gpt-4o"
+    ))
+    google: InferenceProviderConfig = Field(default_factory=lambda: InferenceProviderConfig(
+        enabled=True,
+        default_model="gemini-1.5-pro"
+    ))
+
+    # Global defaults
+    default_temperature: float = Field(default=0.7, ge=0.0, le=2.0)
+    default_max_tokens: Optional[int] = Field(default=None, ge=1)
+    default_timeout: int = 30
+
+
 class LumiConfig(BaseModel):
     """Main configuration model."""
     api_keys: ApiKeysConfig = Field(default_factory=ApiKeysConfig)
@@ -77,7 +110,8 @@ class LumiConfig(BaseModel):
     api: ApiConfig = Field(default_factory=ApiConfig)
     security: SecurityConfig = Field(default_factory=SecurityConfig)
     langchain: LangChainConfig = Field(default_factory=LangChainConfig)
-    
+    inference: UnifiedInferenceConfig = Field(default_factory=UnifiedInferenceConfig)
+
     class Config:
         extra = "allow"  # Allow additional configuration sections
 

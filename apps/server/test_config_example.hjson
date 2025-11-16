@@ -1,0 +1,43 @@
+{
+  // Example configuration for testing unified inference
+  // Copy this to ~/.config/lumi/config.hjson or set LUMI_OPENAI_API_KEY environment variable
+  
+  "api_keys": {
+    "openai": "your-openai-api-key-here",
+    "gemini": "your-google-api-key-here"
+  },
+  
+  "inference": {
+    "enabled": true,
+    "default_provider": "auto",
+    "fallback_providers": ["openai", "google"],
+    "provider_selection_strategy": "cost_optimized",
+    
+    "openai": {
+      "enabled": true,
+      "default_model": "gpt-4o",
+      "timeout": 30
+    },
+    
+    "google": {
+      "enabled": true,
+      "default_model": "gemini-1.5-pro",
+      "timeout": 30
+    },
+    
+    "default_temperature": 0.7,
+    "default_max_tokens": null,
+    "default_timeout": 30
+  },
+  
+  // Keep existing LangChain config for backward compatibility
+  "langchain": {
+    "default_model": "auto",
+    "openai_model": "gpt-4o",
+    "google_model": "gemini-1.5-pro",
+    "default_temperature": 0.7,
+    "max_tokens": null,
+    "dalle_size": "1024x1024",
+    "dalle_quality": "standard"
+  }
+}
