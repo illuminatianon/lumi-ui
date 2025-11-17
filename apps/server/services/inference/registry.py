@@ -379,8 +379,8 @@ class ProviderRegistry:
         Returns:
             True if provider is available, False otherwise
         """
-        if name not in self._shims:
+        if name not in self._instances:
             return False
 
-        shim = self.get_shim(name)
-        return shim is not None and shim.is_available()
+        instance = self._instances[name]
+        return instance is not None and instance.is_available()

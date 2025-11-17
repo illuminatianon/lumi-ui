@@ -15,15 +15,8 @@ Integration tests that test multiple components working together:
 
 ### `manual/`
 Manual test scripts for development and debugging:
-- `test_gpt5.py` - GPT-5 parameter mapping demonstration
-- `test_minimal_image.py` - Minimal Gemini image generation test
-- `test_debug_image.py` - Debug script for Gemini image generation
-- `test_standalone.py` - Core infrastructure test without API keys
-- `test_unified_inference.py` - Unified inference infrastructure test
-- `test_unified_simple.py` - Simple unified inference test
-- `test_pure_rest.py` - Pure REST API implementation test
-- `test_img.py` - Basic image generation test
-- `test_setup.py` - LangChain setup verification (legacy)
+- Directory cleaned up - manual test scripts have been moved to dedicated scripts outside the tests directory
+- This directory is reserved for future manual testing scripts
 
 ## Running Tests
 
@@ -39,9 +32,8 @@ pytest tests/integration/
 
 ### Manual Tests
 ```bash
-# Run individual manual tests
-python tests/manual/test_gpt5.py
-python tests/manual/test_minimal_image.py
+# Manual test scripts have been moved to dedicated scripts
+# See scripts/ directory for API testing scripts
 ```
 
 ## Test Guidelines

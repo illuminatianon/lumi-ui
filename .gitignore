@@ -2,6 +2,8 @@
 # MONOREPO ROOT .gitignore
 # ===================================
 
+generated_images/
+
 # ===== NODE.JS / PNPM =====
 node_modules/
 .pnpm-debug.log*

@@ -77,7 +77,7 @@ class UnifiedInferenceService:
 
         # 5. Process request
         try:
-            return await provider.process_request(request, model_config)
+            return await provider.process_request(model_config.name, request)
         except Exception as e:
             # Try fallback providers if configured
             if self.config.fallback_providers:
@@ -193,7 +193,7 @@ class UnifiedInferenceService:
                     provider = self.provider_registry.get_provider(provider_name)
                     if provider and provider.validate_request(request, model_config):
                         logger.info(f"Trying fallback provider: {provider_name}")
-                        return await provider.process_request(request, model_config)
+                        return await provider.process_request(model_config.name, request)
             except Exception as e:
                 logger.warning(f"Fallback provider {provider_name} failed: {e}")
                 continue

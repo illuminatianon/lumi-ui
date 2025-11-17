@@ -33,7 +33,7 @@ class OpenAIProvider(Provider):
         """
         super().__init__(config)
         self.api_key = config.get('api_key')
-        self.base_url = config.get('base_url', 'https://api.openai.com')
+        self.base_url = config.get('base_url') or 'https://api.openai.com'
         self.client = httpx.AsyncClient(
             base_url=self.base_url,
             headers={
