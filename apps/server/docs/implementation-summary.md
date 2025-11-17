@@ -109,7 +109,7 @@ images = await service.generate_image("A beautiful sunset")
 
 ## 🧪 Testing
 
-Created comprehensive test suite (`test_standalone.py`) that validates:
+Created comprehensive test suite (`tests/manual/test_standalone.py`) that validates:
 - ✅ Model imports and creation
 - ✅ Attachment handling
 - ✅ Model configuration loading

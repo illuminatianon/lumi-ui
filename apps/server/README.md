@@ -45,10 +45,21 @@ Once running, visit:
 
 ## Testing
 
-Run tests:
+### Unit and Integration Tests
+Run the test suite:
 ```bash
 pnpm test
 ```
+
+### Manual Testing
+For testing specific functionality:
+- **Inference Infrastructure**: See [Testing Guide](docs/testing-guide.md)
+- **Image Generation**: See [Image Testing Guide](docs/image-testing-guide.md)
+
+Test files are organized in the `tests/` directory:
+- `tests/unit/` - Unit tests
+- `tests/integration/` - Integration tests
+- `tests/manual/` - Manual test scripts
 
 ## Linting and Formatting
 

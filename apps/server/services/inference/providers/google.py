@@ -1,4 +1,4 @@
-"""Google/Gemini provider shim implementation using pure REST API calls."""
+"""Google/Gemini provider implementation using pure REST API calls."""
 
 import logging
 import json
@@ -6,7 +6,7 @@ import base64
 from typing import Dict, Any, List, Optional
 import httpx
 
-from ..base import ProviderShim
+from ..base import Provider
 from ..models import (
     UnifiedRequest,
     UnifiedResponse,
@@ -22,11 +22,11 @@ from ..models import (
 logger = logging.getLogger(__name__)
 
 
-class GoogleShim(ProviderShim):
-    """Google/Gemini provider shim using pure REST API calls."""
+class GoogleProvider(Provider):
+    """Google/Gemini provider using pure REST API calls."""
 
     def __init__(self, config: Dict[str, Any]):
-        """Initialize Google shim.
+        """Initialize Google provider.
 
         Args:
             config: Provider configuration including api_key
@@ -38,6 +38,78 @@ class GoogleShim(ProviderShim):
             base_url=self.base_url,
             timeout=60.0
         )
+
+    @classmethod
+    def get_provider_name(cls) -> str:
+        """Return the provider name for registry."""
+        return "google"
+
+    @classmethod
+    def get_supported_models(cls) -> Dict[str, ModelConfig]:
+        """Return all models supported by Google."""
+        return {
+            "gemini-1.5-pro": ModelConfig(
+                name="gemini-1.5-pro",
+                display_name="Gemini 1.5 Pro",
+                provider="google",
+                capabilities=ModelCapabilities(
+                    text_generation=True,
+                    vision=True,
+                    function_calling=True,
+                    streaming=True,
+                    max_context_length=2000000,
+                    supports_multimodal=True
+                ),
+                parameter_mapping=ParameterMapping(
+                    max_tokens_param="max_output_tokens",
+                    temperature_param="temperature",
+                    top_p_param="top_p"
+                ),
+                supported_parameters={
+                    "max_output_tokens", "temperature", "top_p", "stop_sequences"
+                },
+                cost_per_1k_tokens=0.0035,
+                context_window=2000000
+            ),
+            "gemini-1.5-flash": ModelConfig(
+                name="gemini-1.5-flash",
+                display_name="Gemini 1.5 Flash",
+                provider="google",
+                capabilities=ModelCapabilities(
+                    text_generation=True,
+                    vision=True,
+                    function_calling=True,
+                    streaming=True,
+                    max_context_length=1000000,
+                    supports_multimodal=True
+                ),
+                parameter_mapping=ParameterMapping(
+                    max_tokens_param="max_output_tokens",
+                    temperature_param="temperature",
+                    top_p_param="top_p"
+                ),
+                supported_parameters={
+                    "max_output_tokens", "temperature", "top_p", "stop_sequences"
+                },
+                cost_per_1k_tokens=0.00075,
+                context_window=1000000
+            ),
+            "gemini-2.5-flash-image": ModelConfig(
+                name="gemini-2.5-flash-image",
+                display_name="Gemini 2.5 Flash Image",
+                provider="google",
+                capabilities=ModelCapabilities(
+                    image_generation=True,
+                    text_generation=False
+                ),
+                parameter_mapping=ParameterMapping(),
+                supported_parameters={
+                    "aspect_ratio", "response_modalities", "reference_images"
+                },
+                cost_per_1k_tokens=0.002,
+                context_window=4000
+            )
+        }
 
     async def __aenter__(self):
         """Async context manager entry."""
@@ -51,25 +123,31 @@ class GoogleShim(ProviderShim):
         """Check if the provider is available."""
         return bool(self.api_key)
 
-    async def process_request(self, request: UnifiedRequest, model_config: ModelConfig) -> UnifiedResponse:
-        """Process a unified request using Google Gemini API.
-        
+    async def process_request(self, model_name: str, request: UnifiedRequest) -> UnifiedResponse:
+        """Process a unified request for a specific model.
+
         Args:
+            model_name: Name of the model to use
             request: The unified request to process
-            model_config: Configuration for the specific model to use
-            
+
         Returns:
             Unified response containing the result
         """
+        # Get model config
+        supported_models = self.get_supported_models()
+        if model_name not in supported_models:
+            available = list(supported_models.keys())
+            raise ValueError(f"Model '{model_name}' not supported. Available: {available}")
+
+        model_config = supported_models[model_name]
         request_type = self.determine_request_type(request, model_config)
-        
+
         if request_type == RequestType.VISION_ANALYSIS:
             return await self._handle_vision_request(request, model_config)
         elif request_type == RequestType.IMAGE_GENERATION:
-            # Google doesn't have image generation in Gemini yet
-            raise NotImplementedError("Google Gemini doesn't support image generation yet")
+            return await self._handle_image_generation(request, model_config)
         elif request_type == RequestType.IMAGE_EDIT:
-            raise NotImplementedError("Google Gemini doesn't support image editing yet")
+            return await self._handle_image_generation(request, model_config)  # Gemini handles editing via generation
         else:
             return await self._handle_text_request(request, model_config)
     
@@ -182,7 +260,112 @@ class GoogleShim(ProviderShim):
         except Exception as e:
             logger.error(f"Google vision request failed: {e}")
             raise
-    
+
+    async def _handle_image_generation(self, request: UnifiedRequest, model_config: ModelConfig) -> UnifiedResponse:
+        """Handle image generation requests for Gemini 2.5 Flash Image via REST API."""
+        # Build content parts for Gemini API
+        parts = [{"text": request.prompt}]
+
+        # Add reference images if provided (for editing/style transfer)
+        for attachment in request.attachments:
+            if attachment.attachment_type == AttachmentType.IMAGE:
+                parts.append({
+                    "inline_data": {
+                        "mime_type": attachment.mime_type,
+                        "data": attachment.to_base64()
+                    }
+                })
+
+        # Build generation config with image-specific parameters
+        generation_config = {}
+
+        # Handle aspect ratio configuration
+        aspect_ratio = request.extras.get("aspect_ratio", "1:1")
+        if aspect_ratio:
+            generation_config["imageConfig"] = {
+                "aspectRatio": aspect_ratio
+            }
+
+        # Handle response modalities (image only or text+image)
+        response_modalities = request.extras.get("response_modalities", ["Text", "Image"])
+        if response_modalities:
+            generation_config["responseModalities"] = response_modalities
+
+        payload = {
+            "contents": [{"parts": parts}],
+            "generationConfig": generation_config
+        }
+
+        try:
+            url = f'/v1beta/models/{model_config.name}:generateContent'
+            params = {'key': self.api_key}
+
+            response = await self.client.post(url, json=payload, params=params)
+            response.raise_for_status()
+            data = response.json()
+
+            # Extract response content and images
+            candidate = data['candidates'][0]
+            content_parts = candidate['content']['parts']
+
+            text_content = ""
+            images = []
+
+            # Debug: Log the response structure
+            logger.debug(f"Gemini response structure: {json.dumps(data, indent=2)}")
+
+            for part in content_parts:
+                if 'text' in part:
+                    text_content += part['text']
+                elif 'inlineData' in part:
+                    # Image data is base64 encoded (note: camelCase in Gemini API)
+                    image_data = part['inlineData']['data']
+                    mime_type = part['inlineData']['mimeType']
+                    images.append(f"data:{mime_type};base64,{image_data}")
+                elif 'inline_data' in part:
+                    # Fallback for snake_case (just in case)
+                    image_data = part['inline_data']['data']
+                    mime_type = part['inline_data']['mime_type']
+                    images.append(f"data:{mime_type};base64,{image_data}")
+
+            # If no images found in parts, check if the response is malformed
+            if not images and not text_content:
+                logger.warning(f"No content found in Gemini response. Raw response: {data}")
+                # Sometimes the image might be in a different location
+                # Let's check the entire response structure
+                logger.warning(f"Full response structure: {json.dumps(data, indent=2)}")
+
+            # Extract usage metadata if available
+            usage_metadata = data.get('usageMetadata', {})
+
+            return UnifiedResponse(
+                content=text_content if text_content else None,
+                images=images,
+                model_used=model_config.name,
+                provider="google",
+                usage=TokenUsage(
+                    prompt_tokens=usage_metadata.get('promptTokenCount', 0),
+                    completion_tokens=usage_metadata.get('candidatesTokenCount', 0),
+                    total_tokens=usage_metadata.get('totalTokenCount', 0)
+                ),
+                finish_reason=candidate.get('finishReason', 'STOP'),
+                attachments_processed=[
+                    {"type": att.attachment_type, "filename": att.filename}
+                    for att in request.attachments
+                ],
+                metadata={
+                    "safety_ratings": candidate.get('safetyRatings', []),
+                    "aspect_ratio": aspect_ratio,
+                    "response_modalities": response_modalities
+                }
+            )
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Google API error: {e.response.status_code} - {e.response.text}")
+            raise
+        except Exception as e:
+            logger.error(f"Google image generation request failed: {e}")
+            raise
+
     def _build_generation_config(self, request: UnifiedRequest, model_config: ModelConfig) -> Dict[str, Any]:
         """Build Gemini generation configuration from unified request."""
         params = self.map_parameters(request.model_dump(), model_config)
@@ -257,6 +440,11 @@ class GoogleShim(ProviderShim):
             logger.warning("Google Gemini doesn't support reasoning effort parameter")
 
         return mapped
+
+    # Legacy compatibility methods
+    async def process_request_legacy(self, request: UnifiedRequest, model_config: ModelConfig) -> UnifiedResponse:
+        """Legacy method for backward compatibility."""
+        return await self.process_request(model_config.name, request)
 
     def prepare_attachments(self, attachments: List[Attachment], model_config: ModelConfig) -> Any:
         """Convert attachments to Google-specific format."""

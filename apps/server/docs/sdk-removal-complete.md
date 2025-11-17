@@ -101,7 +101,7 @@ dependencies = [
 
 ## Testing Results
 
-Created `test_pure_rest.py` which validates:
+Created `tests/manual/test_pure_rest.py` which validates:
 - ✅ OpenAI shim initialization and parameter mapping
 - ✅ Google shim initialization and parameter mapping  
 - ✅ HTTP client setup and configuration

@@ -1,9 +1,9 @@
 """Provider implementations for unified inference."""
 
-from .openai_shim import OpenAIShim
-from .google_shim import GoogleShim
+from .openai import OpenAIProvider
+from .google import GoogleProvider
 
 __all__ = [
-    "OpenAIShim",
-    "GoogleShim",
+    "OpenAIProvider",
+    "GoogleProvider",
 ]

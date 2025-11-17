@@ -10,6 +10,10 @@ load_dotenv()
 # Import configuration system
 from config import initialize_config, config_router, get_config_health
 
+# Import AI models and services
+from api.models import RegistryRequest, RegistryResponse, ModelListResponse
+from services.inference.factory import get_unified_inference_service
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -39,6 +43,17 @@ app.add_middleware(
 
 # Include routers
 app.include_router(config_router)
+
+# Initialize AI inference service
+try:
+    inference_service = get_unified_inference_service()
+    if inference_service:
+        logger.info("AI inference service initialized successfully")
+    else:
+        logger.warning("AI inference service not available (disabled or misconfigured)")
+except Exception as e:
+    logger.error(f"Failed to initialize AI inference service: {e}")
+    inference_service = None
 
 
 # Pydantic models
@@ -83,6 +98,69 @@ async def hello():
     return MessageResponse(
         message="Hello from Lumi API!", timestamp=datetime.now().isoformat()
     )
+
+
+# AI Endpoints
+@app.post("/api/ai/chat", response_model=RegistryResponse)
+async def chat_completion(request: RegistryRequest):
+    """Process chat completion with registry-style model naming."""
+    if not inference_service:
+        return RegistryResponse(
+            content="",
+            model_used="",
+            provider="",
+            success=False,
+            error="AI inference service not available"
+        )
+
+    try:
+        # Convert request to config dict
+        config = request.model_dump()
+
+        # Process with registry resolver
+        response = await inference_service.process_registry_request(config)
+
+        return RegistryResponse(
+            content=response.content or "",
+            model_used=config["model"],
+            provider=config["model"].split("/")[0],
+            success=True,
+            metadata={
+                "token_usage": response.token_usage.model_dump() if response.token_usage else None,
+                "finish_reason": response.finish_reason
+            }
+        )
+    except Exception as e:
+        logger.error(f"Chat completion failed: {e}")
+        return RegistryResponse(
+            content="",
+            model_used=request.model,
+            provider=request.model.split("/")[0] if "/" in request.model else "",
+            success=False,
+            error=str(e)
+        )
+
+
+@app.get("/api/ai/models", response_model=ModelListResponse)
+async def list_models():
+    """List all available models in registry format."""
+    if not inference_service:
+        return ModelListResponse(
+            models=[],
+            providers={},
+            total_models=0
+        )
+
+    try:
+        models_data = inference_service.list_available_models()
+        return ModelListResponse(**models_data)
+    except Exception as e:
+        logger.error(f"Failed to list models: {e}")
+        return ModelListResponse(
+            models=[],
+            providers={},
+            total_models=0
+        )
 
 
 if __name__ == "__main__":

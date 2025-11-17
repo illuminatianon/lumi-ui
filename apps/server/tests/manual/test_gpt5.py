@@ -76,28 +76,28 @@ async def test_gpt5_request():
     # Test GPT-5 request with reasoning
     print("\n3. Testing GPT-5 request...")
     try:
-        # Create a request that showcases GPT-5's reasoning capabilities
-        request = UnifiedRequest(
-            prompt="Solve this step by step: If a train travels at 60 mph for 2.5 hours, then slows to 40 mph for another 1.5 hours, what is the total distance traveled?",
-            model="gpt-5",
-            reasoning_effort="medium",  # GPT-5 specific parameter
-            max_tokens=300,  # Will be mapped to max_completion_tokens
-            temperature=0.7  # Will be ignored since GPT-5 doesn't support it
-        )
+        # Create a request that showcases GPT-5's reasoning capabilities using registry format
+        request_config = {
+            "prompt": "Solve this step by step: If a train travels at 60 mph for 2.5 hours, then slows to 40 mph for another 1.5 hours, what is the total distance traveled?",
+            "model": "openai/gpt-5",  # Registry format: provider/model
+            "reasoning_effort": "medium",  # GPT-5 specific parameter
+            "max_tokens": 300,  # Will be mapped to max_completion_tokens
+            "temperature": 0.7  # Will be ignored since GPT-5 doesn't support it
+        }
         
         print(f"📝 Request details:")
-        print(f"   - Model: {request.model}")
-        print(f"   - Reasoning effort: {request.reasoning_effort}")
-        print(f"   - Max tokens: {request.max_tokens} (will map to max_completion_tokens)")
-        print(f"   - Temperature: {request.temperature} (will be ignored)")
-        print(f"   - Prompt: {request.prompt[:80]}...")
-        
+        print(f"   - Model: {request_config['model']}")
+        print(f"   - Reasoning effort: {request_config['reasoning_effort']}")
+        print(f"   - Max tokens: {request_config['max_tokens']} (will map to max_completion_tokens)")
+        print(f"   - Temperature: {request_config['temperature']} (will be ignored)")
+        print(f"   - Prompt: {request_config['prompt'][:80]}...")
+
         print(f"\n🔄 Making request to GPT-5...")
-        response = await service.process_request(request)
+        response = await service.process_registry_request(request_config)
         
         print(f"✅ GPT-5 response received!")
-        print(f"   - Model used: {response.model_used}")
-        print(f"   - Provider: {response.provider}")
+        print(f"   - Model used: {response.model_used if hasattr(response, 'model_used') else 'N/A'}")
+        print(f"   - Provider: {response.provider if hasattr(response, 'provider') else 'N/A'}")
         print(f"   - Finish reason: {response.finish_reason}")
         print(f"   - Token usage: {response.usage.prompt_tokens} prompt + {response.usage.completion_tokens} completion = {response.usage.total_tokens} total")
         

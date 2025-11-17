@@ -169,7 +169,7 @@ Run the test suite:
 ```bash
 cd apps/server
 source venv/bin/activate
-python test_config.py
+python tests/unit/test_config.py
 ```
 
 ## Integration with FastAPI

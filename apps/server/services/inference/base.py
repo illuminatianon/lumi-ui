@@ -1,7 +1,7 @@
-"""Base provider shim interface."""
+"""Base provider interface."""
 
 from abc import ABC, abstractmethod
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 from .models import (
     UnifiedRequest,
@@ -13,52 +13,90 @@ from .models import (
 )
 
 
-class ProviderShim(ABC):
-    """Abstract base class for provider shims."""
-    
+class Provider(ABC):
+    """Abstract base class for AI providers."""
+
     def __init__(self, config: Dict[str, Any]):
-        """Initialize the provider shim.
-        
+        """Initialize the provider.
+
         Args:
             config: Provider-specific configuration
         """
         self.config = config
-        self.provider_name = self.__class__.__name__.lower().replace('shim', '')
-    
+        self.provider_name = self.get_provider_name()
+
+    @classmethod
     @abstractmethod
-    async def process_request(self, request: UnifiedRequest, model_config: ModelConfig) -> UnifiedResponse:
-        """Process a unified request and return a unified response.
-        
-        Args:
-            request: The unified request to process
-            model_config: Configuration for the specific model to use
-            
+    def get_provider_name(cls) -> str:
+        """Return the provider name for registry.
+
         Returns:
-            Unified response containing the result
+            Provider name (e.g., 'openai', 'google', 'anthropic')
         """
         pass
-    
+
+    @classmethod
     @abstractmethod
-    async def discover_models(self) -> Dict[str, ModelConfig]:
-        """Discover available models and their capabilities from the provider.
-        
+    def get_supported_models(cls) -> Dict[str, ModelConfig]:
+        """Return all models supported by this provider.
+
         Returns:
             Dictionary mapping model names to their configurations
         """
         pass
-    
+
+    @abstractmethod
+    async def process_request(self, model_name: str, request: UnifiedRequest) -> UnifiedResponse:
+        """Process a unified request for a specific model.
+
+        Args:
+            model_name: Name of the model to use (without provider prefix)
+            request: The unified request to process
+
+        Returns:
+            Unified response containing the result
+        """
+        pass
+
+    def validate_model_params(self, model_name: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Validate and map parameters for the specific model.
+
+        Args:
+            model_name: Name of the model
+            params: Parameters to validate and map
+
+        Returns:
+            Validated and mapped parameters
+        """
+        supported_models = self.get_supported_models()
+        if model_name not in supported_models:
+            available = list(supported_models.keys())
+            raise ValueError(f"Model '{model_name}' not supported by {self.provider_name}. Available: {available}")
+
+        model_config = supported_models[model_name]
+        return self.map_parameters(params, model_config)
+
     @abstractmethod
     def map_parameters(self, unified_params: Dict[str, Any], model_config: ModelConfig) -> Dict[str, Any]:
         """Map unified parameters to model-specific parameters.
-        
+
         Args:
             unified_params: Parameters in unified format
             model_config: Configuration for the target model
-            
+
         Returns:
             Parameters mapped to provider-specific format
         """
         pass
+
+    # Legacy methods for backward compatibility during transition
+    async def discover_models(self) -> Dict[str, ModelConfig]:
+        """Legacy method - use get_supported_models() instead."""
+        return self.get_supported_models()
+
+    async def process_request_legacy(self, request: UnifiedRequest, model_config: ModelConfig) -> UnifiedResponse:
+        """Legacy method - use process_request(model_name, request) instead."""
+        return await self.process_request(model_config.name, request)
     
     @abstractmethod
     def prepare_attachments(self, attachments: List[Attachment], model_config: ModelConfig) -> Any:

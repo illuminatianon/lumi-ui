@@ -1,4 +1,4 @@
-"""OpenAI provider shim implementation using pure REST API calls."""
+"""OpenAI provider implementation using pure REST API calls."""
 
 import logging
 import json
@@ -6,7 +6,7 @@ import base64
 from typing import Dict, Any, List, Optional
 import httpx
 
-from ..base import ProviderShim
+from ..base import Provider
 from ..models import (
     UnifiedRequest,
     UnifiedResponse,
@@ -14,17 +14,19 @@ from ..models import (
     Attachment,
     AttachmentType,
     TokenUsage,
-    RequestType
+    RequestType,
+    ParameterMapping,
+    ModelCapabilities
 )
 
 logger = logging.getLogger(__name__)
 
 
-class OpenAIShim(ProviderShim):
-    """OpenAI provider shim using pure REST API calls."""
+class OpenAIProvider(Provider):
+    """OpenAI provider using pure REST API calls."""
 
     def __init__(self, config: Dict[str, Any]):
-        """Initialize OpenAI shim.
+        """Initialize OpenAI provider.
 
         Args:
             config: Provider configuration including api_key
@@ -41,6 +43,80 @@ class OpenAIShim(ProviderShim):
             timeout=60.0
         )
 
+    @classmethod
+    def get_provider_name(cls) -> str:
+        """Return the provider name for registry."""
+        return "openai"
+
+    @classmethod
+    def get_supported_models(cls) -> Dict[str, ModelConfig]:
+        """Return all models supported by OpenAI."""
+        return {
+            "gpt-4o": ModelConfig(
+                name="gpt-4o",
+                display_name="GPT-4o",
+                provider="openai",
+                capabilities=ModelCapabilities(
+                    text_generation=True,
+                    vision=True,
+                    function_calling=True,
+                    streaming=True,
+                    json_mode=True,
+                    max_context_length=128000,
+                    supports_multimodal=True
+                ),
+                parameter_mapping=ParameterMapping(
+                    max_tokens_param="max_tokens",
+                    temperature_param="temperature",
+                    top_p_param="top_p"
+                ),
+                supported_parameters={
+                    "max_tokens", "temperature", "top_p",
+                    "frequency_penalty", "presence_penalty", "stop", "stream"
+                },
+                cost_per_1k_tokens=0.005,
+                context_window=128000
+            ),
+            "gpt-5": ModelConfig(
+                name="gpt-5",
+                display_name="GPT-5",
+                provider="openai",
+                capabilities=ModelCapabilities(
+                    text_generation=True,
+                    vision=True,
+                    function_calling=True,
+                    streaming=True,
+                    json_mode=True,
+                    max_context_length=200000,
+                    supports_multimodal=True
+                ),
+                parameter_mapping=ParameterMapping(
+                    max_tokens_param="max_completion_tokens",
+                    temperature_param=None,  # GPT-5 ignores temperature
+                    top_p_param=None,
+                    custom_params={"reasoning_effort": "medium"}
+                ),
+                supported_parameters={
+                    "max_completion_tokens", "reasoning_effort", "stream"
+                },
+                cost_per_1k_tokens=0.01,
+                context_window=200000
+            ),
+            "dall-e-3": ModelConfig(
+                name="dall-e-3",
+                display_name="DALL-E 3",
+                provider="openai",
+                capabilities=ModelCapabilities(
+                    image_generation=True,
+                    text_generation=False
+                ),
+                parameter_mapping=ParameterMapping(),
+                supported_parameters={"size", "quality", "style", "n"},
+                cost_per_1k_tokens=0.04,
+                context_window=4000
+            )
+        }
+
     async def __aenter__(self):
         """Async context manager entry."""
         return self
@@ -53,18 +129,25 @@ class OpenAIShim(ProviderShim):
         """Check if the provider is available."""
         return bool(self.api_key)
 
-    async def process_request(self, request: UnifiedRequest, model_config: ModelConfig) -> UnifiedResponse:
-        """Process a unified request using OpenAI API.
-        
+    async def process_request(self, model_name: str, request: UnifiedRequest) -> UnifiedResponse:
+        """Process a unified request for a specific model.
+
         Args:
+            model_name: Name of the model to use
             request: The unified request to process
-            model_config: Configuration for the specific model to use
-            
+
         Returns:
             Unified response containing the result
         """
+        # Get model config
+        supported_models = self.get_supported_models()
+        if model_name not in supported_models:
+            available = list(supported_models.keys())
+            raise ValueError(f"Model '{model_name}' not supported. Available: {available}")
+
+        model_config = supported_models[model_name]
         request_type = self.determine_request_type(request, model_config)
-        
+
         if request_type == RequestType.VISION_ANALYSIS:
             return await self._handle_vision_request(request, model_config)
         elif request_type == RequestType.IMAGE_GENERATION:
@@ -172,22 +255,64 @@ class OpenAIShim(ProviderShim):
             raise
     
     async def _handle_image_generation(self, request: UnifiedRequest, model_config: ModelConfig) -> UnifiedResponse:
-        """Handle DALL-E image generation via REST API."""
+        """Handle OpenAI image generation (DALL-E 3, GPT Image 1) via REST API."""
+
+        # Build base payload
         payload = {
             "model": model_config.name,
             "prompt": request.prompt,
-            "size": request.extras.get("size", "1024x1024"),
-            "quality": request.extras.get("quality", "standard"),
             "n": 1
         }
+
+        # Handle model-specific parameters
+        if model_config.name == "gpt-image-1":
+            # GPT Image 1 specific parameters
+            if "aspect_ratio" in request.extras:
+                aspect_ratio = request.extras["aspect_ratio"]
+                # Map aspect ratio to size for GPT Image 1
+                size_mapping = {
+                    "1:1": "1024x1024",
+                    "3:2": "1536x1024",
+                    "2:3": "1024x1536"
+                }
+                payload["size"] = size_mapping.get(aspect_ratio, "1024x1024")
+            else:
+                payload["size"] = request.extras.get("size", "1024x1024")
+
+            # Quality parameter
+            if "quality" in request.extras:
+                payload["quality"] = request.extras["quality"]
+
+            # Style parameter
+            if "style" in request.extras:
+                payload["style"] = request.extras["style"]
+
+        else:
+            # DALL-E 3 and other models
+            payload["size"] = request.extras.get("size", "1024x1024")
+            payload["quality"] = request.extras.get("quality", "standard")
+
+            # Style parameter for DALL-E 3
+            if "style" in request.extras:
+                payload["style"] = request.extras["style"]
 
         try:
             response = await self.client.post('/v1/images/generations', json=payload)
             response.raise_for_status()
             data = response.json()
 
+            # Extract images and any revised prompts
+            images = []
+            for img_data in data['data']:
+                images.append(img_data['url'])
+
+            # Extract revised prompt if available (DALL-E 3 feature)
+            revised_prompt = None
+            if data['data'] and 'revised_prompt' in data['data'][0]:
+                revised_prompt = data['data'][0]['revised_prompt']
+
             return UnifiedResponse(
-                images=[img['url'] for img in data['data']],
+                images=images,
                 model_used=model_config.name,
                 provider="openai",
                 usage=TokenUsage(prompt_tokens=0, completion_tokens=0, total_tokens=0),
@@ -195,7 +320,13 @@ class OpenAIShim(ProviderShim):
                 attachments_processed=[
                     {"type": att.attachment_type, "used_as": "reference"}
                     for att in request.attachments
-                ]
+                ],
+                metadata={
+                    "revised_prompt": revised_prompt,
+                    "original_size": payload.get("size"),
+                    "quality": payload.get("quality"),
+                    "style": payload.get("style")
+                }
             )
         except httpx.HTTPStatusError as e:
             logger.error(f"OpenAI API error: {e.response.status_code} - {e.response.text}")
@@ -275,6 +406,11 @@ class OpenAIShim(ProviderShim):
                 mapped["reasoning_effort"] = mapping.custom_params["reasoning_effort"]
 
         return mapped
+
+    # Legacy compatibility methods
+    async def process_request_legacy(self, request: UnifiedRequest, model_config: ModelConfig) -> UnifiedResponse:
+        """Legacy method for backward compatibility."""
+        return await self.process_request(model_config.name, request)
 
     def prepare_attachments(self, attachments: List[Attachment], model_config: ModelConfig) -> Any:
         """Convert attachments to OpenAI-specific format."""

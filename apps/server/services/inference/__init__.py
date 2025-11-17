@@ -14,9 +14,10 @@ from .models import (
     RequestType
 )
 
-from .base import ProviderShim
+from .base import Provider
 from .service import UnifiedInferenceService
 from .registry import ModelRegistry, ProviderRegistry
+from .resolver import ModelResolver
 
 __all__ = [
     # Models
@@ -33,7 +34,7 @@ __all__ = [
     "RequestType",
     
     # Base classes
-    "ProviderShim",
+    "Provider",
     
     # Services
     "UnifiedInferenceService",
@@ -41,4 +42,5 @@ __all__ = [
     # Registries
     "ModelRegistry",
     "ProviderRegistry",
+    "ModelResolver",
 ]

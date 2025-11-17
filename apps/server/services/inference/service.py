@@ -13,9 +13,10 @@ from .models import (
     Attachment,
     AttachmentType
 )
-from .base import ProviderShim
+from .base import Provider
 from .registry import ModelRegistry, ProviderRegistry
-from .providers import OpenAIShim, GoogleShim
+from .resolver import ModelResolver
+from .providers import OpenAIProvider, GoogleProvider
 
 logger = logging.getLogger(__name__)
 
@@ -32,19 +33,20 @@ class UnifiedInferenceService:
         self.config = config
         self.model_registry = ModelRegistry()
         self.provider_registry = ProviderRegistry()
+        self.model_resolver = ModelResolver(self.provider_registry)
         self._initialize_providers()
     
     def _initialize_providers(self):
-        """Initialize and register provider shims."""
-        # Register provider shim classes
-        self.provider_registry.register_provider("openai", OpenAIShim)
-        self.provider_registry.register_provider("google", GoogleShim)
-        
+        """Initialize and register providers."""
+        # Auto-register provider classes
+        self.provider_registry.register_provider(OpenAIProvider)
+        self.provider_registry.register_provider(GoogleProvider)
+
         # Initialize provider instances with configuration
         for provider_name, provider_config in self.config.providers.items():
             if provider_config.enabled:
-                shim = self.provider_registry.get_shim(provider_name, provider_config.model_dump())
-                if shim and shim.is_available():
+                provider = self.provider_registry.get_provider(provider_name, provider_config.model_dump())
+                if provider and provider.is_available():
                     logger.info(f"Provider {provider_name} initialized successfully")
                 else:
                     logger.warning(f"Provider {provider_name} failed to initialize")
@@ -64,18 +66,18 @@ class UnifiedInferenceService:
         # 2. Select appropriate model based on request type and attachments
         model_config = await self._select_model(request, request_type)
         
-        # 3. Get provider shim
-        shim = self.provider_registry.get_shim(model_config.provider)
-        if not shim:
+        # 3. Get provider
+        provider = self.provider_registry.get_provider(model_config.provider)
+        if not provider:
             raise ValueError(f"Provider {model_config.provider} not available")
         
         # 4. Validate request compatibility
-        if not shim.validate_request(request, model_config):
+        if not provider.validate_request(request, model_config):
             raise ValueError(f"Request not compatible with model {model_config.name}")
-        
+
         # 5. Process request
         try:
-            return await shim.process_request(request, model_config)
+            return await provider.process_request(request, model_config)
         except Exception as e:
             # Try fallback providers if configured
             if self.config.fallback_providers:
@@ -106,9 +108,9 @@ class UnifiedInferenceService:
             # User specified a model, try to find it
             for provider_name in self.config.providers.keys():
                 model_config = await self.model_registry.get_model_config(
-                    provider_name, 
+                    provider_name,
                     request.model,
-                    self.provider_registry.get_shim(provider_name)
+                    self.provider_registry.get_provider(provider_name)
                 )
                 if model_config:
                     return model_config
@@ -188,10 +190,10 @@ class UnifiedInferenceService:
             try:
                 model_config = await self._select_model_for_provider(request, request_type, provider_name)
                 if model_config:
-                    shim = self.provider_registry.get_shim(provider_name)
-                    if shim and shim.validate_request(request, model_config):
+                    provider = self.provider_registry.get_provider(provider_name)
+                    if provider and provider.validate_request(request, model_config):
                         logger.info(f"Trying fallback provider: {provider_name}")
-                        return await shim.process_request(request, model_config)
+                        return await provider.process_request(request, model_config)
             except Exception as e:
                 logger.warning(f"Fallback provider {provider_name} failed: {e}")
                 continue
@@ -223,6 +225,41 @@ class UnifiedInferenceService:
             return model_config.capabilities.text_generation
         else:
             return False
+
+    async def process_registry_request(self, config: Dict[str, Any]) -> UnifiedResponse:
+        """Process request using registry-style model naming (provider/model).
+
+        Args:
+            config: Request configuration with registry-style model name
+
+        Returns:
+            Unified response from the provider
+
+        Raises:
+            ValueError: If model or provider not found
+        """
+        # Resolve provider and model
+        provider, model_name, validated_params = await self.model_resolver.resolve_request(config)
+
+        # Build unified request
+        request = self.model_resolver.build_unified_request(config)
+
+        # Process with provider
+        try:
+            response = await provider.process_request(model_name, request)
+            logger.info(f"Registry request processed successfully: {config.get('model')}")
+            return response
+        except Exception as e:
+            logger.error(f"Registry request failed for {config.get('model')}: {e}")
+            raise
+
+    def list_available_models(self) -> Dict[str, Any]:
+        """List all available models in registry format.
+
+        Returns:
+            Dictionary with available models and metadata
+        """
+        return self.model_resolver.list_available_models()
 
     # Convenience methods for common use cases
     async def chat(self, message: str, attachments: List[Attachment] = None, **kwargs) -> str:

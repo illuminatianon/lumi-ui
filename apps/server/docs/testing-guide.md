@@ -19,12 +19,12 @@ export OPENAI_API_KEY='your-openai-api-key-here'
 ```bash
 cd apps/server
 source venv/bin/activate
-python test_gpt5.py
+python tests/manual/test_gpt5.py
 ```
 
 ## Test Scripts
 
-### `test_gpt5.py` - GPT-5 Parameter Mapping Demo
+### `tests/manual/test_gpt5.py` - GPT-5 Parameter Mapping Demo
 
 **Purpose**: Demonstrates the unified inference infrastructure with GPT-5's model-specific parameters.
 
@@ -50,7 +50,7 @@ Parameter mapping:
    Note: temperature ignored, max_tokens → max_completion_tokens
 ```
 
-### `test_standalone.py` - Core Infrastructure Test
+### `tests/manual/test_standalone.py` - Core Infrastructure Test
 
 **Purpose**: Tests the core components without requiring API keys.
 

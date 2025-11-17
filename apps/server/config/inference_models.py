@@ -47,6 +47,22 @@ class ReasoningCapabilities(BaseModel):
     reasoning_token_cost: Optional[float] = None  # Cost per reasoning token if different
 
 
+class ImageGenerationCapabilities(BaseModel):
+    """Image generation specific capabilities."""
+    supported_aspect_ratios: List[str] = Field(default_factory=list)  # e.g., ["1:1", "16:9", "9:16"]
+    supported_sizes: List[str] = Field(default_factory=list)  # e.g., ["1024x1024", "1536x1024"]
+    supported_quality_levels: List[str] = Field(default_factory=list)  # e.g., ["standard", "hd"]
+    supported_styles: List[str] = Field(default_factory=list)  # e.g., ["vivid", "natural"]
+    max_images_per_request: int = 1
+    supports_image_editing: bool = False
+    supports_style_transfer: bool = False
+    supports_inpainting: bool = False
+    supports_reference_images: bool = False
+    default_aspect_ratio: str = "1:1"
+    default_quality: str = "standard"
+    tokens_per_image: int = 1290  # For token-based pricing models
+
+
 class ModelCapabilities(BaseModel):
     """Capabilities supported by a specific model."""
     text_generation: bool = True
@@ -63,6 +79,9 @@ class ModelCapabilities(BaseModel):
 
     # Reasoning capabilities
     reasoning: ReasoningCapabilities = Field(default_factory=ReasoningCapabilities)
+
+    # Image generation capabilities
+    image_generation_config: ImageGenerationCapabilities = Field(default_factory=ImageGenerationCapabilities)
 
 
 class ModelConfig(BaseModel):
@@ -262,4 +281,94 @@ EXAMPLE_GEMINI_CONFIG = ModelConfig(
     cost_per_1k_tokens=0.0125,
     max_tokens_per_request=8192,
     context_window=1000000
+)
+
+# Image Generation Model Configurations
+
+GEMINI_2_5_FLASH_IMAGE_CONFIG = ModelConfig(
+    name="gemini-2.5-flash-image",
+    display_name="Gemini 2.5 Flash Image",
+    capabilities=ModelCapabilities(
+        text_generation=True,  # Can generate text descriptions along with images
+        vision=False,  # This is for generation, not analysis
+        image_generation=True,
+        function_calling=False,
+        streaming=False,
+        json_mode=False,
+        max_context_length=8192,
+        supports_multimodal=True,
+        reasoning=ReasoningCapabilities(
+            supports_reasoning=False
+        ),
+        image_generation_config=ImageGenerationCapabilities(
+            supported_aspect_ratios=[
+                "1:1", "2:3", "3:2", "3:4", "4:3",
+                "4:5", "5:4", "9:16", "16:9", "21:9"
+            ],
+            supported_sizes=[
+                "1024x1024", "832x1248", "1248x832", "864x1184",
+                "1184x864", "896x1152", "1152x896", "768x1344",
+                "1344x768", "1536x672"
+            ],
+            supported_quality_levels=["standard"],  # Gemini doesn't have quality levels
+            supported_styles=[],  # Style is controlled via prompt
+            max_images_per_request=1,
+            supports_image_editing=True,
+            supports_style_transfer=True,
+            supports_inpainting=True,
+            supports_reference_images=True,
+            default_aspect_ratio="1:1",
+            default_quality="standard",
+            tokens_per_image=1290
+        )
+    ),
+    cost_per_1k_tokens=0.03,  # $30 per 1M tokens, 1290 tokens per image
+    max_tokens_per_request=8192,
+    context_window=8192,
+    provider_specific={
+        "model_endpoint": "gemini-2.5-flash-image",
+        "supports_response_modalities": True,
+        "supports_image_config": True
+    }
+)
+
+GPT_IMAGE_1_CONFIG = ModelConfig(
+    name="gpt-image-1",
+    display_name="GPT Image 1",
+    capabilities=ModelCapabilities(
+        text_generation=True,  # Can generate text descriptions along with images
+        vision=False,  # This is for generation, not analysis
+        image_generation=True,
+        function_calling=False,
+        streaming=False,
+        json_mode=False,
+        max_context_length=4096,
+        supports_multimodal=True,
+        reasoning=ReasoningCapabilities(
+            supports_reasoning=False
+        ),
+        image_generation_config=ImageGenerationCapabilities(
+            supported_aspect_ratios=["1:1", "3:2", "2:3"],
+            supported_sizes=["1024x1024", "1536x1024", "1024x1536"],
+            supported_quality_levels=["standard", "hd"],
+            supported_styles=["vivid", "natural"],
+            max_images_per_request=1,
+            supports_image_editing=False,  # GPT Image 1 doesn't support editing
+            supports_style_transfer=False,
+            supports_inpainting=False,
+            supports_reference_images=False,
+            default_aspect_ratio="1:1",
+            default_quality="standard",
+            tokens_per_image=1000  # Approximate for pricing
+        )
+    ),
+    cost_per_1k_tokens=0.04,  # Per image cost
+    max_tokens_per_request=4096,
+    context_window=4096,
+    provider_specific={
+        "model_endpoint": "gpt-image-1",
+        "supports_quality": True,
+        "supports_style": True,
+        "supports_size": True
+    }
 )
