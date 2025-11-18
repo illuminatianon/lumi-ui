@@ -1,7 +1,8 @@
 """API models for AI endpoints."""
 
 from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+from services.inference.models import Message, MessageRole
 
 
 class TextGenerationRequest(BaseModel):
@@ -131,10 +132,21 @@ class ModelStatusResponse(BaseModel):
 
 
 class RegistryRequest(BaseModel):
-    """Generic request model for registry-style model requests."""
+    """Generic request model for registry-style model requests.
+
+    Supports both single-turn (prompt + system_message) and multi-turn (messages) formats.
+    Either prompt or messages must be provided, but not both.
+    """
     model: str = Field(..., description="Model to use in 'provider/model' format")
-    prompt: str = Field(..., description="The prompt or instruction")
+
+    # Single-turn format (backward compatible)
+    prompt: Optional[str] = Field(None, description="The prompt or instruction")
     system_message: Optional[str] = Field(None, description="Optional system message")
+
+    # Multi-turn format (new)
+    messages: Optional[List[Message]] = Field(None, description="List of messages for multi-turn conversation")
+
+    # Common parameters
     temperature: Optional[float] = Field(None, ge=0.0, le=2.0, description="Temperature for generation")
     max_tokens: Optional[int] = Field(None, description="Maximum number of tokens to generate")
     top_p: Optional[float] = Field(None, description="Top-p for generation")
@@ -163,6 +175,20 @@ class RegistryRequest(BaseModel):
         if len(parts) != 2 or not parts[0] or not parts[1]:
             raise ValueError("Invalid model format. Use 'provider/model' (e.g., 'openai/gpt-4o')")
         return v
+
+    @model_validator(mode='after')
+    def validate_prompt_or_messages(self):
+        """Ensure either prompt or messages is provided, but not both."""
+        has_prompt = self.prompt is not None
+        has_messages = self.messages is not None and len(self.messages) > 0
+
+        if not has_prompt and not has_messages:
+            raise ValueError("Either 'prompt' or 'messages' must be provided")
+
+        if has_prompt and has_messages:
+            raise ValueError("Cannot provide both 'prompt' and 'messages'. Use one or the other.")
+
+        return self
 
 
 class RegistryResponse(BaseModel):

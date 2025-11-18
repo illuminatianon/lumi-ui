@@ -86,16 +86,17 @@ class ModelResolver:
     
     def build_unified_request(self, config: Dict[str, Any]) -> UnifiedRequest:
         """Build a UnifiedRequest from config.
-        
+
         Args:
             config: Request configuration
-            
+
         Returns:
             UnifiedRequest instance
         """
         return UnifiedRequest(
-            prompt=config.get("prompt", ""),
+            prompt=config.get("prompt"),
             system_message=config.get("system_message"),
+            messages=config.get("messages"),
             attachments=config.get("attachments", []),
             temperature=config.get("temperature"),
             max_tokens=config.get("max_tokens"),

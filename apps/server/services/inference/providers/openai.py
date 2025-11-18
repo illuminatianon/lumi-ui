@@ -157,13 +157,73 @@ class OpenAIProvider(Provider):
         else:
             return await self._handle_text_request(request, model_config)
     
+    def _build_messages(self, request: UnifiedRequest) -> List[Dict[str, Any]]:
+        """Build messages array from either single-turn or multi-turn format."""
+        if request.is_multi_turn():
+            # Use messages directly - convert to OpenAI format
+            return [{"role": msg.role, "content": msg.content} for msg in request.messages]
+        else:
+            # Build from prompt and system_message (backward compatibility)
+            messages = []
+            if request.system_message:
+                messages.append({"role": "system", "content": request.system_message})
+            messages.append({"role": "user", "content": request.prompt})
+            return messages
+
+    def _build_messages_with_attachments(self, request: UnifiedRequest) -> List[Dict[str, Any]]:
+        """Build messages array with attachment support for vision requests."""
+        if request.is_multi_turn():
+            # For multi-turn, attachments are assumed to be part of the last user message
+            # This is a simplification - in the future we could support attachments per message
+            messages = [{"role": msg.role, "content": msg.content} for msg in request.messages]
+
+            # If there are attachments, modify the last user message to include them
+            if request.attachments:
+                # Find the last user message
+                for i in range(len(messages) - 1, -1, -1):
+                    if messages[i]["role"] == "user":
+                        # Convert text content to multimodal format
+                        content = [{"type": "text", "text": messages[i]["content"]}]
+
+                        # Add images
+                        for attachment in request.attachments:
+                            if attachment.attachment_type == AttachmentType.IMAGE:
+                                content.append({
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": f"data:{attachment.mime_type};base64,{attachment.to_base64()}"
+                                    }
+                                })
+
+                        messages[i]["content"] = content
+                        break
+
+            return messages
+        else:
+            # Single-turn with attachments (existing logic)
+            messages = []
+            if request.system_message:
+                messages.append({"role": "system", "content": request.system_message})
+
+            # Build user message with text and images
+            content = [{"type": "text", "text": request.prompt}]
+
+            for attachment in request.attachments:
+                if attachment.attachment_type == AttachmentType.IMAGE:
+                    content.append({
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:{attachment.mime_type};base64,{attachment.to_base64()}"
+                        }
+                    })
+
+            messages.append({"role": "user", "content": content})
+            return messages
+
     async def _handle_text_request(self, request: UnifiedRequest, model_config: ModelConfig) -> UnifiedResponse:
         """Handle pure text generation requests via REST API."""
         # Build messages
-        messages = []
-        if request.system_message:
-            messages.append({"role": "system", "content": request.system_message})
-        messages.append({"role": "user", "content": request.prompt})
+        messages = self._build_messages(request)
 
         # Map parameters
         params = self.map_parameters(request.model_dump(), model_config)
@@ -215,23 +275,7 @@ class OpenAIProvider(Provider):
     async def _handle_vision_request(self, request: UnifiedRequest, model_config: ModelConfig) -> UnifiedResponse:
         """Handle vision requests with image attachments via REST API."""
         # Build messages with images in OpenAI format
-        messages = []
-        if request.system_message:
-            messages.append({"role": "system", "content": request.system_message})
-
-        # Build user message with text and images
-        content = [{"type": "text", "text": request.prompt}]
-
-        for attachment in request.attachments:
-            if attachment.attachment_type == AttachmentType.IMAGE:
-                content.append({
-                    "type": "image_url",
-                    "image_url": {
-                        "url": f"data:{attachment.mime_type};base64,{attachment.to_base64()}"
-                    }
-                })
-
-        messages.append({"role": "user", "content": content})
+        messages = self._build_messages_with_attachments(request)
 
         # Map parameters
         params = self.map_parameters(request.model_dump(), model_config)

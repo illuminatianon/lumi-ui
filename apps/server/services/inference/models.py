@@ -5,7 +5,7 @@ import mimetypes
 from enum import Enum
 from typing import Optional, List, Dict, Any, Literal, Set
 from pathlib import Path
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class AttachmentType(str, Enum):
@@ -26,6 +26,22 @@ class RequestType(str, Enum):
     IMAGE_GENERATION = "image_generation"
     IMAGE_EDIT = "image_edit"
     DOCUMENT_ANALYSIS = "document"
+
+
+class MessageRole(str, Enum):
+    """Roles for chat messages in multi-turn conversations."""
+    SYSTEM = "system"
+    USER = "user"
+    ASSISTANT = "assistant"
+
+
+class Message(BaseModel):
+    """A single message in a multi-turn conversation."""
+    role: MessageRole
+    content: str
+
+    class Config:
+        use_enum_values = True
 
 
 class Attachment(BaseModel):
@@ -111,9 +127,19 @@ class TokenUsage(BaseModel):
 
 
 class UnifiedRequest(BaseModel):
-    """Unified request that works for text, vision, and generation tasks."""
-    prompt: str
+    """Unified request that works for text, vision, and generation tasks.
+
+    Supports both single-turn (prompt + system_message) and multi-turn (messages) formats.
+    Either prompt or messages must be provided, but not both.
+    """
+    # Single-turn format (backward compatible)
+    prompt: Optional[str] = None
     system_message: Optional[str] = None
+
+    # Multi-turn format (new)
+    messages: Optional[List[Message]] = None
+
+    # Common fields
     attachments: List[Attachment] = Field(default_factory=list)
 
     # Standard parameters
@@ -136,6 +162,24 @@ class UnifiedRequest(BaseModel):
 
     # Provider-specific parameters
     extras: Dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode='after')
+    def validate_prompt_or_messages(self):
+        """Ensure either prompt or messages is provided, but not both."""
+        has_prompt = self.prompt is not None
+        has_messages = self.messages is not None and len(self.messages) > 0
+
+        if not has_prompt and not has_messages:
+            raise ValueError("Either 'prompt' or 'messages' must be provided")
+
+        if has_prompt and has_messages:
+            raise ValueError("Cannot provide both 'prompt' and 'messages'. Use one or the other.")
+
+        return self
+
+    def is_multi_turn(self) -> bool:
+        """Check if this is a multi-turn conversation request."""
+        return self.messages is not None and len(self.messages) > 0
 
     class Config:
         arbitrary_types_allowed = True

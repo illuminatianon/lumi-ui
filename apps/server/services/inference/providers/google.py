@@ -190,14 +190,14 @@ class GoogleProvider(Provider):
     
     async def _handle_text_request(self, request: UnifiedRequest, model_config: ModelConfig) -> UnifiedResponse:
         """Handle pure text generation requests via REST API."""
-        # Build content for Gemini API
-        content = self._build_prompt(request)
+        # Build contents for Gemini API
+        contents = self._build_contents(request)
 
         # Map parameters
         generation_config = self._build_generation_config(request, model_config)
 
         payload = {
-            "contents": [{"parts": [{"text": content}]}],
+            "contents": contents,
             "generationConfig": generation_config
         }
 
@@ -260,25 +260,31 @@ class GoogleProvider(Provider):
     async def _handle_vision_request(self, request: UnifiedRequest, model_config: ModelConfig) -> UnifiedResponse:
         """Handle vision requests with image attachments via REST API."""
         # Build content parts for Gemini API
-        parts = [{"text": request.prompt}]
+        if request.is_multi_turn():
+            # For multi-turn, we need to build contents with messages and add images to the last user message
+            contents = self._build_contents_with_attachments(request)
+            payload = {
+                "contents": contents,
+                "generationConfig": self._build_generation_config(request, model_config)
+            }
+        else:
+            # Single-turn format (backward compatibility)
+            parts = [{"text": request.prompt}]
 
-        # Add images as inline data
-        for attachment in request.attachments:
-            if attachment.attachment_type == AttachmentType.IMAGE:
-                parts.append({
-                    "inline_data": {
-                        "mime_type": attachment.mime_type,
-                        "data": attachment.to_base64()
-                    }
-                })
+            # Add images as inline data
+            for attachment in request.attachments:
+                if attachment.attachment_type == AttachmentType.IMAGE:
+                    parts.append({
+                        "inline_data": {
+                            "mime_type": attachment.mime_type,
+                            "data": attachment.to_base64()
+                        }
+                    })
 
-        # Map parameters
-        generation_config = self._build_generation_config(request, model_config)
-
-        payload = {
-            "contents": [{"parts": parts}],
-            "generationConfig": generation_config
-        }
+            payload = {
+                "contents": [{"parts": parts}],
+                "generationConfig": self._build_generation_config(request, model_config)
+            }
 
         try:
             url = f'/v1beta/models/{model_config.name}:generateContent'
@@ -324,18 +330,24 @@ class GoogleProvider(Provider):
         # For Gemini 2.5 Flash Image, we need to use the generateContent endpoint
         # but with specific image generation parameters
 
-        # Build the prompt content
-        parts = [{"text": request.prompt}]
+        # Build contents with support for both single-turn and multi-turn formats
+        if request.is_multi_turn():
+            contents = self._build_contents_with_attachments(request)
+        else:
+            # Single-turn format (backward compatibility)
+            parts = [{"text": request.prompt}]
 
-        # Add reference images if provided (for editing/style transfer)
-        for attachment in request.attachments:
-            if attachment.attachment_type == AttachmentType.IMAGE:
-                parts.append({
-                    "inline_data": {
-                        "mime_type": attachment.mime_type,
-                        "data": attachment.to_base64()
-                    }
-                })
+            # Add reference images if provided (for editing/style transfer)
+            for attachment in request.attachments:
+                if attachment.attachment_type == AttachmentType.IMAGE:
+                    parts.append({
+                        "inline_data": {
+                            "mime_type": attachment.mime_type,
+                            "data": attachment.to_base64()
+                        }
+                    })
+
+            contents = [{"parts": parts}]
 
         # Build generation config with image-specific parameters
         generation_config = {}
@@ -353,7 +365,7 @@ class GoogleProvider(Provider):
             generation_config["responseModalities"] = response_modalities
 
         payload = {
-            "contents": [{"parts": parts}],
+            "contents": contents,
             "generationConfig": generation_config
         }
 
@@ -444,10 +456,75 @@ class GoogleProvider(Provider):
         return config_params
 
     def _build_prompt(self, request: UnifiedRequest) -> str:
-        """Build prompt from system message and user prompt."""
+        """Build prompt from system message and user prompt (single-turn only)."""
         if request.system_message:
             return f"System: {request.system_message}\n\nUser: {request.prompt}"
         return request.prompt
+
+    def _build_contents(self, request: UnifiedRequest) -> List[Dict[str, Any]]:
+        """Build contents array for Gemini API from either single-turn or multi-turn format."""
+        if request.is_multi_turn():
+            # Convert messages to Gemini format
+            contents = []
+            for msg in request.messages:
+                # Map roles: system -> user (Gemini doesn't have system role)
+                role = "user" if msg.role in ["system", "user"] else "model"
+                contents.append({
+                    "role": role,
+                    "parts": [{"text": msg.content}]
+                })
+            return contents
+        else:
+            # Single-turn format (backward compatibility)
+            content = self._build_prompt(request)
+            return [{"parts": [{"text": content}]}]
+
+    def _build_contents_with_attachments(self, request: UnifiedRequest) -> List[Dict[str, Any]]:
+        """Build contents array with attachment support for vision/image generation requests."""
+        if request.is_multi_turn():
+            # Convert messages to Gemini format
+            contents = []
+            for msg in request.messages:
+                # Map roles: system -> user (Gemini doesn't have system role)
+                role = "user" if msg.role in ["system", "user"] else "model"
+                contents.append({
+                    "role": role,
+                    "parts": [{"text": msg.content}]
+                })
+
+            # Add attachments to the last user message
+            if request.attachments:
+                # Find the last user message
+                for i in range(len(contents) - 1, -1, -1):
+                    if contents[i]["role"] == "user":
+                        # Add images to this message
+                        for attachment in request.attachments:
+                            if attachment.attachment_type == AttachmentType.IMAGE:
+                                contents[i]["parts"].append({
+                                    "inline_data": {
+                                        "mime_type": attachment.mime_type,
+                                        "data": attachment.to_base64()
+                                    }
+                                })
+                        break
+
+            return contents
+        else:
+            # Single-turn format - handled by caller
+            content = self._build_prompt(request)
+            parts = [{"text": content}]
+
+            # Add images
+            for attachment in request.attachments:
+                if attachment.attachment_type == AttachmentType.IMAGE:
+                    parts.append({
+                        "inline_data": {
+                            "mime_type": attachment.mime_type,
+                            "data": attachment.to_base64()
+                        }
+                    })
+
+            return [{"parts": parts}]
 
     async def discover_models(self) -> Dict[str, ModelConfig]:
         """Discover available Google models via REST API."""
