@@ -105,16 +105,32 @@ class UnifiedInferenceService:
     async def _select_model(self, request: UnifiedRequest, request_type: RequestType) -> ModelConfig:
         """Select best model for the request type."""
         if request.model != "auto":
-            # User specified a model, try to find it
-            for provider_name in self.config.providers.keys():
-                model_config = await self.model_registry.get_model_config(
-                    provider_name,
-                    request.model,
-                    self.provider_registry.get_provider(provider_name)
-                )
-                if model_config:
-                    return model_config
-            raise ValueError(f"Model {request.model} not found")
+            # User specified a model in provider/model format
+            if "/" in request.model:
+                provider_name, model_name = request.model.split("/", 1)
+                if provider_name in self.config.providers:
+                    provider = self.provider_registry.get_provider(provider_name)
+                    if provider:
+                        # Get model config directly from the provider
+                        supported_models = provider.get_supported_models()
+                        if model_name in supported_models:
+                            return supported_models[model_name]
+                        else:
+                            available = list(supported_models.keys())
+                            raise ValueError(f"Model {model_name} not found in provider {provider_name}. Available: {available}")
+                    else:
+                        raise ValueError(f"Provider {provider_name} not available")
+                else:
+                    raise ValueError(f"Provider {provider_name} not found")
+            else:
+                # Legacy support: try to find model in any provider (for backward compatibility)
+                for provider_name in self.config.providers.keys():
+                    provider = self.provider_registry.get_provider(provider_name)
+                    if provider:
+                        supported_models = provider.get_supported_models()
+                        if request.model in supported_models:
+                            return supported_models[request.model]
+                raise ValueError(f"Model {request.model} not found")
         
         # Auto-select based on request type and capabilities
         if request_type == RequestType.VISION_ANALYSIS:

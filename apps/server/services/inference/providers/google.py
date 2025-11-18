@@ -94,20 +94,57 @@ class GoogleProvider(Provider):
                 cost_per_1k_tokens=0.00075,
                 context_window=1000000
             ),
+            "gemini-2.5-flash": ModelConfig(
+                name="gemini-2.5-flash",
+                display_name="Gemini 2.5 Flash",
+                provider="google",
+                capabilities=ModelCapabilities(
+                    text_generation=True,
+                    vision=True,
+                    function_calling=True,
+                    streaming=True,
+                    max_context_length=1000000,
+                    supports_multimodal=True
+                ),
+                parameter_mapping=ParameterMapping(
+                    max_tokens_param="max_output_tokens",
+                    temperature_param="temperature",
+                    top_p_param="top_p"
+                ),
+                supported_parameters={
+                    "max_output_tokens", "temperature", "top_p", "stop_sequences"
+                },
+                cost_per_1k_tokens=0.00075,
+                context_window=1000000
+            ),
             "gemini-2.5-flash-image": ModelConfig(
                 name="gemini-2.5-flash-image",
                 display_name="Gemini 2.5 Flash Image",
                 provider="google",
                 capabilities=ModelCapabilities(
+                    text_generation=True,
+                    image_editing=True,  # This is the key capability for reference images
+                    vision=True,  # Also needed for processing reference images
                     image_generation=True,
-                    text_generation=False
+                    function_calling=False,
+                    streaming=False,
+                    max_context_length=1000000,
                 ),
-                parameter_mapping=ParameterMapping(),
+                parameter_mapping=ParameterMapping(
+                    max_tokens_param="max_output_tokens",
+                    temperature_param="temperature",
+                    top_p_param="top_p",
+                ),
                 supported_parameters={
-                    "aspect_ratio", "response_modalities", "reference_images"
+                    "max_output_tokens",
+                    "temperature",
+                    "top_p",
+                    "stop_sequences",
+                    "aspect_ratio",
+                    "response_modalities"
                 },
-                cost_per_1k_tokens=0.002,
-                context_window=4000
+                cost_per_1k_tokens=0.00075,
+                context_window=1000000,
             )
         }
 
@@ -172,8 +209,29 @@ class GoogleProvider(Provider):
             response.raise_for_status()
             data = response.json()
 
-            # Extract response content
-            content = data['candidates'][0]['content']['parts'][0]['text']
+            # Extract response content with error handling
+            content = ""
+            try:
+                candidate = data['candidates'][0]
+                if 'content' in candidate and 'parts' in candidate['content']:
+                    content = candidate['content']['parts'][0]['text']
+                elif 'content' in candidate and 'text' in candidate['content']:
+                    # Alternative structure
+                    content = candidate['content']['text']
+                else:
+                    # Check if content is empty due to safety filters or other reasons
+                    finish_reason = candidate.get('finishReason', 'UNKNOWN')
+                    if finish_reason == 'MAX_TOKENS':
+                        content = "[Response truncated due to max tokens limit]"
+                    elif finish_reason in ['SAFETY', 'RECITATION']:
+                        content = f"[Response blocked due to {finish_reason} filters]"
+                    else:
+                        logger.error(f"No content found in Google response. Structure: {data}")
+                        raise ValueError(f"No content in Google API response. Finish reason: {finish_reason}")
+            except (KeyError, IndexError) as e:
+                logger.error(f"Failed to extract content from Google response: {e}")
+                logger.error(f"Response structure: {data}")
+                raise ValueError(f"Invalid response structure from Google API: {e}")
 
             # Extract usage metadata if available
             usage_metadata = data.get('usageMetadata', {})
@@ -263,7 +321,10 @@ class GoogleProvider(Provider):
 
     async def _handle_image_generation(self, request: UnifiedRequest, model_config: ModelConfig) -> UnifiedResponse:
         """Handle image generation requests for Gemini 2.5 Flash Image via REST API."""
-        # Build content parts for Gemini API
+        # For Gemini 2.5 Flash Image, we need to use the generateContent endpoint
+        # but with specific image generation parameters
+
+        # Build the prompt content
         parts = [{"text": request.prompt}]
 
         # Add reference images if provided (for editing/style transfer)

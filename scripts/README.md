@@ -12,6 +12,7 @@ Tests text generation capabilities using both OpenAI and Google models through t
 **Features:**
 - Tests OpenAI models (GPT-4o, GPT-5)
 - Tests Google models (Gemini 1.5 Pro, Gemini 1.5 Flash)
+- Tests vision capabilities with image attachments (`vision_test.jpg`)
 - Tests automatic model selection
 - Shows token usage and model performance
 
@@ -26,6 +27,13 @@ python scripts/test_text_generation.py
 Tests image generation capabilities using the Gemini 2.5 Flash Image model.
 
 **Features:**
+- Tests basic image generation
+- Tests aspect ratio support (16:9)
+- Tests creative style generation
+- Tests reference image functionality with `ref_test.png`
+- Saves generated images to `generated_images/` directory
+
+**Features:**
 - Basic image generation with descriptive prompts
 - Different aspect ratio testing (1:1, 16:9, 9:16, 3:2, 2:3)
 - Creative and complex prompt testing
@@ -35,6 +43,15 @@ Tests image generation capabilities using the Gemini 2.5 Flash Image model.
 ```bash
 python scripts/test_image_generation.py
 ```
+
+## Test Images
+
+The scripts use two test images for testing image attachment functionality:
+
+- **`vision_test.jpg`** - Used for testing vision capabilities in text models (960x782 JPEG of a kitten with a cowboy hat)
+- **`ref_test.png`** - Used for testing reference image functionality in image generation models (864x1184 PNG)
+
+These images are included in the repository and automatically loaded by the test scripts.
 
 ## Setup Requirements
 

@@ -1,5 +1,6 @@
 """Base provider interface."""
 
+import logging
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional
 
@@ -11,6 +12,8 @@ from .models import (
     AttachmentType,
     RequestType
 )
+
+logger = logging.getLogger(__name__)
 
 
 class Provider(ABC):
@@ -139,24 +142,38 @@ class Provider(ABC):
     
     def validate_request(self, request: UnifiedRequest, model_config: ModelConfig) -> bool:
         """Validate that the request is compatible with the model.
-        
+
         Args:
             request: The unified request to validate
             model_config: Configuration for the target model
-            
+
         Returns:
             True if request is valid for this model, False otherwise
         """
         request_type = self.determine_request_type(request, model_config)
-        
+
+        # Debug logging
+        logger.debug(f"Validating request for {model_config.name}")
+        logger.debug(f"Request type: {request_type}")
+        logger.debug(f"Model capabilities: {model_config.capabilities}")
+
         # Check if model supports the required capabilities
         if request_type == RequestType.VISION_ANALYSIS and not model_config.capabilities.vision:
+            logger.warning(f"Model {model_config.name} does not support vision analysis")
             return False
         elif request_type == RequestType.IMAGE_GENERATION and not model_config.capabilities.image_generation:
+            logger.warning(f"Model {model_config.name} does not support image generation. Capabilities: {model_config.capabilities}")
             return False
-        elif request_type == RequestType.IMAGE_EDIT and not model_config.capabilities.image_editing:
-            return False
-        
+        elif request_type == RequestType.IMAGE_EDIT:
+            # Check image editing capability
+            if not model_config.capabilities.image_generation:
+                logger.warning(f"Model {model_config.name} does not support image generation (required for image editing)")
+                return False
+            if not model_config.capabilities.image_editing:
+                logger.warning(f"Model {model_config.name} does not support image editing")
+                return False
+
+        logger.debug(f"Request validation passed for {model_config.name}")
         return True
     
     def get_supported_models(self) -> List[str]:

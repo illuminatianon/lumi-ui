@@ -173,13 +173,28 @@ class OpenAIProvider(Provider):
             **{k: v for k, v in params.items() if v is not None and k in model_config.supported_parameters}
         }
 
+
+
         try:
             response = await self.client.post('/v1/chat/completions', json=payload)
             response.raise_for_status()
             data = response.json()
 
+            # Extract content from response
+            message = data['choices'][0]['message']
+            content = message.get('content', '')
+
+            # Debug logging for empty content (useful for reasoning models)
+            if not content:
+                usage = data.get('usage', {})
+                reasoning_tokens = usage.get('completion_tokens_details', {}).get('reasoning_tokens', 0)
+                if reasoning_tokens > 0:
+                    logger.warning(f"Empty content from {model_config.name} - used {reasoning_tokens} reasoning tokens, may need higher max_tokens")
+                else:
+                    logger.warning(f"Empty content from {model_config.name}. Full response: {data}")
+
             return UnifiedResponse(
-                content=data['choices'][0]['message']['content'],
+                content=content,
                 model_used=data['model'],
                 provider="openai",
                 usage=TokenUsage(

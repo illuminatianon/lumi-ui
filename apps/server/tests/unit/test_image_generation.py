@@ -7,7 +7,7 @@ from typing import Dict, Any
 from services.inference.image_validation import ImageGenerationValidator
 from services.inference.service import UnifiedInferenceService
 from services.inference.models import UnifiedRequest, InferenceConfig
-from config.inference_models import GEMINI_2_5_FLASH_IMAGE_CONFIG, GPT_IMAGE_1_CONFIG
+# Model configs now come from providers directly
 
 
 async def test_parameter_validation():
@@ -55,21 +55,30 @@ async def test_model_configurations():
     """Test model configuration loading."""
     print("\n=== Testing Model Configurations ===")
     
-    # Test Gemini config
-    print("\n--- Gemini 2.5 Flash Image Config ---")
-    print(f"Name: {GEMINI_2_5_FLASH_IMAGE_CONFIG.name}")
-    print(f"Display Name: {GEMINI_2_5_FLASH_IMAGE_CONFIG.display_name}")
-    print(f"Image Generation: {GEMINI_2_5_FLASH_IMAGE_CONFIG.capabilities.image_generation}")
-    print(f"Supported Aspect Ratios: {GEMINI_2_5_FLASH_IMAGE_CONFIG.capabilities.image_generation_config.supported_aspect_ratios}")
-    print(f"Supports Reference Images: {GEMINI_2_5_FLASH_IMAGE_CONFIG.capabilities.image_generation_config.supports_reference_images}")
-    
-    # Test GPT Image 1 config
-    print("\n--- GPT Image 1 Config ---")
-    print(f"Name: {GPT_IMAGE_1_CONFIG.name}")
-    print(f"Display Name: {GPT_IMAGE_1_CONFIG.display_name}")
-    print(f"Image Generation: {GPT_IMAGE_1_CONFIG.capabilities.image_generation}")
-    print(f"Supported Aspect Ratios: {GPT_IMAGE_1_CONFIG.capabilities.image_generation_config.supported_aspect_ratios}")
-    print(f"Supported Quality Levels: {GPT_IMAGE_1_CONFIG.capabilities.image_generation_config.supported_quality_levels}")
+    # Import providers to get model configs
+    from services.inference.providers.google import GoogleProvider
+    from services.inference.providers.openai import OpenAIProvider
+
+    # Test Gemini config from provider
+    google_models = GoogleProvider.get_supported_models()
+    if "gemini-2.5-flash-image" in google_models:
+        gemini_config = google_models["gemini-2.5-flash-image"]
+        print("\n--- Gemini 2.5 Flash Image Config ---")
+        print(f"Name: {gemini_config.name}")
+        print(f"Display Name: {gemini_config.display_name}")
+        print(f"Image Generation: {gemini_config.capabilities.image_generation}")
+        print(f"Image Editing: {gemini_config.capabilities.image_editing}")
+        print(f"Vision: {gemini_config.capabilities.vision}")
+
+    # Test OpenAI models
+    openai_models = OpenAIProvider.get_supported_models()
+    if "dall-e-3" in openai_models:
+        dalle_config = openai_models["dall-e-3"]
+        print("\n--- DALL-E 3 Config ---")
+        print(f"Name: {dalle_config.name}")
+        print(f"Display Name: {dalle_config.display_name}")
+        print(f"Image Generation: {dalle_config.capabilities.image_generation}")
+        print(f"Text Generation: {dalle_config.capabilities.text_generation}")
 
 
 async def test_unified_request_creation():

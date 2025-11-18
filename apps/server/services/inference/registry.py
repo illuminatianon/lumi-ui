@@ -15,179 +15,12 @@ class ModelRegistry:
 
     def __init__(self):
         """Initialize the model registry."""
-        self._static_registry = self._build_static_registry()
+        # No static registry - all models come from providers
         self._runtime_cache: Dict[str, Dict[str, ModelConfig]] = {}
         self._cache_timestamps: Dict[str, datetime] = {}
         self._cache_ttl = timedelta(hours=1)  # Cache for 1 hour
 
-    def _build_static_registry(self) -> Dict[str, Dict[str, ModelConfig]]:
-        """Build the static model registry with known model configurations."""
-        return {
-            "openai": {
-                "gpt-4o": ModelConfig(
-                    name="gpt-4o",
-                    display_name="GPT-4o",
-                    provider="openai",
-                    capabilities=ModelCapabilities(
-                        text_generation=True,
-                        vision=True,
-                        function_calling=True,
-                        streaming=True,
-                        json_mode=True,
-                        max_context_length=128000,
-                    ),
-                    parameter_mapping=ParameterMapping(
-                        max_tokens_param="max_tokens",
-                        temperature_param="temperature",
-                        top_p_param="top_p",
-                    ),
-                    supported_parameters={
-                        "max_tokens",
-                        "temperature",
-                        "top_p",
-                        "frequency_penalty",
-                        "presence_penalty",
-                        "stop",
-                        "stream",
-                    },
-                    cost_per_1k_tokens=0.005,
-                    context_window=128000,
-                ),
-                "gpt-5": ModelConfig(
-                    name="gpt-5",
-                    display_name="GPT-5",
-                    provider="openai",
-                    capabilities=ModelCapabilities(
-                        text_generation=True,
-                        vision=True,
-                        reasoning=True,
-                        function_calling=True,
-                        streaming=True,
-                        json_mode=True,
-                        max_context_length=200000,
-                    ),
-                    parameter_mapping=ParameterMapping(
-                        max_tokens_param="max_completion_tokens",
-                        temperature_param=None,  # Not supported
-                        top_p_param=None,
-                        custom_params={"reasoning_effort": "medium"},
-                    ),
-                    supported_parameters={
-                        "max_completion_tokens",
-                        "reasoning_effort",
-                        "stream",
-                    },
-                    cost_per_1k_tokens=0.01,
-                    context_window=200000,
-                ),
-                "o1-preview": ModelConfig(
-                    name="o1-preview",
-                    display_name="o1-preview",
-                    provider="openai",
-                    capabilities=ModelCapabilities(
-                        text_generation=True, reasoning=True, max_context_length=128000
-                    ),
-                    parameter_mapping=ParameterMapping(
-                        max_tokens_param="max_completion_tokens",
-                        temperature_param=None,
-                        top_p_param=None,
-                    ),
-                    supported_parameters={"max_completion_tokens"},
-                    cost_per_1k_tokens=0.015,
-                    context_window=128000,
-                ),
-                "dall-e-3": ModelConfig(
-                    name="dall-e-3",
-                    display_name="DALL-E 3",
-                    provider="openai",
-                    capabilities=ModelCapabilities(
-                        image_generation=True, text_generation=False
-                    ),
-                    parameter_mapping=ParameterMapping(),
-                    supported_parameters={"size", "quality", "style", "n"},
-                    cost_per_1k_tokens=0.04,  # Per image cost
-                    context_window=4000,
-                ),
-            },
-            "google": {
-                "gemini-2.5-flash-image": ModelConfig(
-                    name="gemini-2.5-flash-image",
-                    display_name="Gemini 2.5 Flash Image",
-                    provider="google",
-                    capabilities=ModelCapabilities(
-                        text_generation=True,
-                        image_editing=True,
-                        vision=True,
-                        function_calling=False,
-                        streaming=False,
-                        max_context_length=1000000,
-                    ),
-                    parameter_mapping=ParameterMapping(
-                        max_tokens_param="max_output_tokens",
-                        temperature_param="temperature",
-                        top_p_param="top_p",
-                    ),
-                    supported_parameters={
-                        "max_output_tokens",
-                        "temperature",
-                        "top_p",
-                        "stop_sequences",
-                    },
-                    cost_per_1k_tokens=0.00075,
-                    context_window=1000000,
-                ),
-                "gemini-1.5-pro": ModelConfig(
-                    name="gemini-1.5-pro",
-                    display_name="Gemini 1.5 Pro",
-                    provider="google",
-                    capabilities=ModelCapabilities(
-                        text_generation=True,
-                        vision=True,
-                        function_calling=True,
-                        streaming=True,
-                        max_context_length=2000000,
-                    ),
-                    parameter_mapping=ParameterMapping(
-                        max_tokens_param="max_output_tokens",
-                        temperature_param="temperature",
-                        top_p_param="top_p",
-                    ),
-                    supported_parameters={
-                        "max_output_tokens",
-                        "temperature",
-                        "top_p",
-                        "stop_sequences",
-                    },
-                    cost_per_1k_tokens=0.0035,
-                    context_window=2000000,
-                ),
-                "gemini-1.5-flash": ModelConfig(
-                    name="gemini-1.5-flash",
-                    display_name="Gemini 1.5 Flash",
-                    provider="google",
-                    capabilities=ModelCapabilities(
-                        text_generation=True,
-                        vision=True,
-                        function_calling=True,
-                        streaming=True,
-                        max_context_length=1000000,
-                    ),
-                    parameter_mapping=ParameterMapping(
-                        max_tokens_param="max_output_tokens",
-                        temperature_param="temperature",
-                        top_p_param="top_p",
-                    ),
-                    supported_parameters={
-                        "max_output_tokens",
-                        "temperature",
-                        "top_p",
-                        "stop_sequences",
-                    },
-                    cost_per_1k_tokens=0.00075,
-                    context_window=1000000,
-                ),
-            },
-        }
+
 
     async def get_model_config(
         self, provider: str, model_name: str, provider_instance: Optional[Provider] = None
@@ -202,14 +35,7 @@ class ModelRegistry:
         Returns:
             Model configuration or None if not found
         """
-        # 1. Check static registry first
-        if (
-            provider in self._static_registry
-            and model_name in self._static_registry[provider]
-        ):
-            return self._static_registry[provider][model_name]
-
-        # 2. Check runtime cache
+        # 1. Check runtime cache first
         if (
             provider in self._runtime_cache
             and model_name in self._runtime_cache[provider]
@@ -220,7 +46,7 @@ class ModelRegistry:
                 if cache_age < self._cache_ttl:
                     return self._runtime_cache[provider][model_name]
 
-        # 3. Try dynamic discovery if provider is provided
+        # 2. Try dynamic discovery if provider is provided
         if provider_instance:
             try:
                 discovered = await provider_instance.discover_models()
@@ -234,7 +60,7 @@ class ModelRegistry:
             except Exception as e:
                 logger.warning(f"Model discovery failed for {provider}: {e}")
 
-        # 4. Return None if not found
+        # 3. Return None if not found
         logger.warning(f"Model configuration not found: {provider}/{model_name}")
         return None
 
@@ -249,12 +75,24 @@ class ModelRegistry:
         Returns:
             Dictionary mapping provider names to lists of model names
         """
-        if provider:
-            return {provider: list(self._static_registry.get(provider, {}).keys())}
+        # Import providers to get their models
+        from .providers.openai import OpenAIProvider
+        from .providers.google import GoogleProvider
 
-        return {
-            prov: list(models.keys()) for prov, models in self._static_registry.items()
-        }
+        available = {}
+
+        if provider:
+            # Get models for specific provider
+            if provider == "openai":
+                available["openai"] = list(OpenAIProvider.get_supported_models().keys())
+            elif provider == "google":
+                available["google"] = list(GoogleProvider.get_supported_models().keys())
+        else:
+            # Get models for all providers
+            available["openai"] = list(OpenAIProvider.get_supported_models().keys())
+            available["google"] = list(GoogleProvider.get_supported_models().keys())
+
+        return available
 
 
 class ProviderRegistry:
