@@ -802,7 +802,6 @@ class ModelConfig(BaseModel):
     context_window: Optional[int] = None
 
 class ProviderConfig(BaseModel):
-    enabled: bool = True
     api_key: str
     base_url: Optional[str] = None
     models: Dict[str, ModelConfig]

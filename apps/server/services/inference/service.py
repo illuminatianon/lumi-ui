@@ -44,12 +44,11 @@ class UnifiedInferenceService:
 
         # Initialize provider instances with configuration
         for provider_name, provider_config in self.config.providers.items():
-            if provider_config.enabled:
-                provider = self.provider_registry.get_provider(provider_name, provider_config.model_dump())
-                if provider and provider.is_available():
-                    logger.info(f"Provider {provider_name} initialized successfully")
-                else:
-                    logger.warning(f"Provider {provider_name} failed to initialize")
+            provider = self.provider_registry.get_provider(provider_name, provider_config.model_dump())
+            if provider and provider.is_available():
+                logger.info(f"Provider {provider_name} initialized successfully")
+            else:
+                logger.warning(f"Provider {provider_name} failed to initialize")
     
     async def process_request(self, request: UnifiedRequest) -> UnifiedResponse:
         """Single entry point for all inference requests.
@@ -147,9 +146,6 @@ class UnifiedInferenceService:
         candidates = []
         
         for provider_name, provider_config in self.config.providers.items():
-            if not provider_config.enabled:
-                continue
-                
             for model_name, model_config in provider_config.models.items():
                 if model_config.capabilities.vision:
                     candidates.append(model_config)
@@ -165,9 +161,6 @@ class UnifiedInferenceService:
         candidates = []
         
         for provider_name, provider_config in self.config.providers.items():
-            if not provider_config.enabled:
-                continue
-                
             for model_name, model_config in provider_config.models.items():
                 if model_config.capabilities.image_generation:
                     candidates.append(model_config)
@@ -187,9 +180,6 @@ class UnifiedInferenceService:
         candidates = []
         
         for provider_name, provider_config in self.config.providers.items():
-            if not provider_config.enabled:
-                continue
-                
             for model_name, model_config in provider_config.models.items():
                 if model_config.capabilities.text_generation:
                     candidates.append(model_config)
@@ -220,7 +210,7 @@ class UnifiedInferenceService:
     async def _select_model_for_provider(self, request: UnifiedRequest, request_type: RequestType, provider_name: str) -> Optional[ModelConfig]:
         """Select a model from a specific provider for the request type."""
         provider_config = self.config.providers.get(provider_name)
-        if not provider_config or not provider_config.enabled:
+        if not provider_config:
             return None
 
         for model_name, model_config in provider_config.models.items():

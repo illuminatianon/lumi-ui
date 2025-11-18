@@ -70,7 +70,6 @@ class LangChainConfig(BaseModel):
 
 class InferenceProviderConfig(BaseModel):
     """Configuration for an inference provider."""
-    enabled: bool = True
     api_key: Optional[str] = None
     base_url: Optional[str] = None
     default_model: str = "auto"
@@ -80,18 +79,15 @@ class InferenceProviderConfig(BaseModel):
 
 class UnifiedInferenceConfig(BaseModel):
     """Unified inference infrastructure settings."""
-    enabled: bool = False  # Start disabled, enable when ready
     default_provider: str = "auto"
     fallback_providers: List[str] = Field(default_factory=lambda: ["openai", "google"])
     provider_selection_strategy: Literal["cost_optimized", "performance", "reliability"] = "cost_optimized"
 
     # Provider configurations
     openai: InferenceProviderConfig = Field(default_factory=lambda: InferenceProviderConfig(
-        enabled=True,
         default_model="gpt-4o"
     ))
     google: InferenceProviderConfig = Field(default_factory=lambda: InferenceProviderConfig(
-        enabled=True,
         default_model="gemini-1.5-pro"
     ))
 

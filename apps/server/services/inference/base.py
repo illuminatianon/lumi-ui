@@ -186,11 +186,8 @@ class Provider(ABC):
     
     def is_available(self) -> bool:
         """Check if this provider is available and properly configured.
-        
+
         Returns:
             True if provider is available, False otherwise
         """
-        return (
-            self.config.get('enabled', False) and
-            self.config.get('api_key') is not None
-        )
+        return self.config.get('api_key') is not None

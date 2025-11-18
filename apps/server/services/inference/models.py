@@ -235,7 +235,6 @@ class ModelConfig(BaseModel):
 
 class ProviderConfig(BaseModel):
     """Configuration for a provider."""
-    enabled: bool = True
     api_key: str
     base_url: Optional[str] = None
     models: Dict[str, ModelConfig] = Field(default_factory=dict)

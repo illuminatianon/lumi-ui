@@ -29,26 +29,21 @@ def get_unified_inference_service() -> Optional[UnifiedInferenceService]:
 
 def create_unified_inference_service() -> Optional[UnifiedInferenceService]:
     """Create a new unified inference service instance from configuration.
-    
+
     Returns:
-        Unified inference service instance or None if not enabled/configured
+        Unified inference service instance or None if not configured
     """
     try:
         config = get_config()
-        
-        # Check if unified inference is enabled
-        if not config.inference.enabled:
-            logger.info("Unified inference is disabled in configuration")
-            return None
-        
+
         # Build inference configuration from app config
         inference_config = _build_inference_config(config)
-        
+
         # Create and return service
         service = UnifiedInferenceService(inference_config)
         logger.info("Unified inference service created successfully")
         return service
-        
+
     except Exception as e:
         logger.error(f"Failed to create unified inference service: {e}")
         return None
@@ -57,29 +52,27 @@ def create_unified_inference_service() -> Optional[UnifiedInferenceService]:
 def _build_inference_config(app_config) -> InferenceConfig:
     """Build InferenceConfig from application configuration."""
     providers = {}
-    
-    # Configure OpenAI provider
-    if app_config.inference.openai.enabled and app_config.api_keys.openai:
+
+    # Configure OpenAI provider if API key is available
+    if app_config.api_keys.openai:
         providers["openai"] = ProviderConfig(
-            enabled=True,
             api_key=app_config.api_keys.openai,
             base_url=app_config.inference.openai.base_url,
             models=_get_openai_models(),
             default_model=app_config.inference.openai.default_model,
             rate_limits={"default": app_config.inference.openai.rate_limit_rpm} if app_config.inference.openai.rate_limit_rpm else {}
         )
-    
-    # Configure Google provider
-    if app_config.inference.google.enabled and app_config.api_keys.gemini:
+
+    # Configure Google provider if API key is available
+    if app_config.api_keys.gemini:
         providers["google"] = ProviderConfig(
-            enabled=True,
             api_key=app_config.api_keys.gemini,
             base_url=app_config.inference.google.base_url,
             models=_get_google_models(),
             default_model=app_config.inference.google.default_model,
             rate_limits={"default": app_config.inference.google.rate_limit_rpm} if app_config.inference.google.rate_limit_rpm else {}
         )
-    
+
     return InferenceConfig(
         providers=providers,
         default_provider=app_config.inference.default_provider,

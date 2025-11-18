@@ -166,7 +166,7 @@ response = await service.analyze_image(image, "Explain this diagram")
 - ✅ Compatibility layer maintains existing API contracts
 - ✅ Configuration extended to support both systems
 - ✅ API endpoints updated to use compatibility service
-- ⚠️ Unified inference disabled by default (set `inference.enabled = true` to activate)
+- ✅ Unified inference automatically enabled when API keys are configured
 
 ## 🎯 Benefits Achieved
 
@@ -179,10 +179,9 @@ response = await service.analyze_image(image, "Explain this diagram")
 
 ## 🔧 Next Steps
 
-1. **Enable unified inference** by setting `inference.enabled = true` in configuration
-2. **Add API keys** for OpenAI and Google to test with real models
-3. **Gradually migrate** internal consumers to use the new service
-4. **Add more providers** (Anthropic, Azure OpenAI, etc.) as needed
-5. **Monitor performance** and optimize based on usage patterns
+1. **Add API keys** for OpenAI and Google to automatically enable inference
+2. **Gradually migrate** internal consumers to use the new service
+3. **Add more providers** (Anthropic, Azure OpenAI, etc.) as needed
+4. **Monitor performance** and optimize based on usage patterns
 
 The unified inference infrastructure is now ready for production use and provides a solid foundation for future AI provider integrations.

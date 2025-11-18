@@ -201,10 +201,7 @@ async def main():
     
     config = get_config()
     
-    # Enable inference if not already enabled
-    if not config.inference.enabled:
-        print("⚠️  Unified inference is disabled. Enabling for this test...")
-        config.inference.enabled = True
+    # Inference is always enabled if API keys are configured
     
     # Create unified inference service
     print("2. Creating unified inference service...")

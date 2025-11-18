@@ -8,19 +8,16 @@
   },
   
   "inference": {
-    "enabled": true,
     "default_provider": "auto",
     "fallback_providers": ["openai", "google"],
     "provider_selection_strategy": "cost_optimized",
-    
+
     "openai": {
-      "enabled": true,
       "default_model": "gpt-4o",
       "timeout": 30
     },
-    
+
     "google": {
-      "enabled": true,
       "default_model": "gemini-1.5-pro",
       "timeout": 30
     },

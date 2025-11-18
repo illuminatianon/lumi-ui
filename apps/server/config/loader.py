@@ -199,17 +199,14 @@ class ConfigurationLoader:
                 "dalle_quality": "standard"
             },
             "inference": {
-                "enabled": False,
                 "default_provider": "auto",
                 "fallback_providers": ["openai", "google"],
                 "provider_selection_strategy": "cost_optimized",
                 "openai": {
-                    "enabled": True,
                     "default_model": "gpt-4o",
                     "timeout": 30
                 },
                 "google": {
-                    "enabled": True,
                     "default_model": "gemini-1.5-pro",
                     "timeout": 30
                 },
